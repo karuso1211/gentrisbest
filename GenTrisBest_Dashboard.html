@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenTri's Best | Dashboard</title>
+    <link rel="icon" type="Images/png" href="Images/logo1.jpg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --sky-blue: #0ea5e9;
+            --sky-blue-hover: #0284c7;
+            --sky-blue-light: #e0f2fe;
+        }
+
+        body {
+            background-color: #f0f9ff;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .text-sky {
+            color: var(--sky-blue) !important;
+        }
+
+        .bg-sky {
+            background-color: var(--sky-blue) !important;
+            color: white;
+        }
+
+        .bg-sky-subtle {
+            background-color: var(--sky-blue-light) !important;
+        }
+
+        .sidebar {
+            width: 280px;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 100;
+            box-shadow: 0 0.125rem 0.25rem rgba(14, 165, 233, 0.1);
+            background-color: #ffffff;
+        }
+
+        .sidebar-sticky {
+            height: calc(100vh - 76px);
+            overflow-x: hidden;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .main-content {
+            margin-left: 280px;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .nav-item .nav-link {
+            color: #495057;
+            padding: 0.8rem 1.5rem;
+            font-weight: 500;
+            border-radius: 0.5rem;
+            margin: 0.2rem 1rem;
+            transition: all 0.2s;
+        }
+
+        .nav-item .nav-link i {
+            width: 24px;
+            text-align: center;
+            margin-right: 10px;
+            color: #6c757d;
+        }
+
+        .nav-item .nav-link:hover,
+        .nav-item .nav-link.active {
+            color: var(--sky-blue);
+            background-color: var(--sky-blue-light);
+        }
+
+        .nav-item .nav-link:hover i,
+        .nav-item .nav-link.active i {
+            color: var(--sky-blue);
+        }
+
+        .user-profile {
+            border-top: 1px solid rgba(0, 0, 0, .05);
+            padding: 1.5rem;
+            margin-top: auto;
+            background-color: #ffffff;
+        }
+
+        .avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background-color: var(--sky-blue);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 6px rgba(14, 165, 233, 0.2);
+        }
+
+        .stat-card {
+            border-radius: 1rem;
+            border: none;
+            box-shadow: 0 0.125rem 0.5rem rgba(14, 165, 233, 0.1);
+            transition: transform 0.2s;
+            background-color: white;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 0.5rem 1rem rgba(14, 165, 233, 0.15);
+        }
+
+        .stat-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .btn-outline-sky {
+            color: var(--sky-blue);
+            border-color: var(--sky-blue);
+            background-color: transparent;
+        }
+
+        .btn-outline-sky:hover {
+            color: white;
+            background-color: var(--sky-blue);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+            }
+
+            .sidebar-sticky {
+                height: auto;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container-fluid p-0">
+        <div class="row g-0">
+            
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar h-100 d-flex flex-column dashboard-layout">
+                <div class="d-flex align-items-center px-4 py-3 border-bottom bg-white">
+                    <div class="bg-sky text-white rounded-circle d-flex align-items-center justify-content-center me-3 shadow-sm border border-2 border-white"
+                        style="width: 40px; height: 40px; font-size: 1.2rem; overflow: hidden;">
+                        <img src="Images/logo1.jpg" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <h5 class="mb-0 fw-bold text-sky fs-5">Dairy Box GenTri</h5>
+                </div>
+
+                <div class="sidebar-sticky d-flex flex-column flex-grow-1 py-3 bg-white">
+                    <ul class="nav flex-column mb-auto">
+                        <li class="nav-item">
+                            <a class="nav-link active" aria-current="page" href="#" onclick="showSection('overview')">
+                                <i class="fa-solid fa-house"></i> Overview
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('analytics')">
+                                <i class="fa-solid fa-chart-pie"></i> Analytics
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('team')">
+                                <i class="fa-solid fa-users"></i> Team
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('reports')">
+                                <i class="fa-solid fa-file-invoice"></i> Reports
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('settings')">
+                                <i class="fa-solid fa-gear"></i> Settings
+                            </a>
+                        </li>
+                        <li class="nav-item" id="adminNavItem" style="display: none;">
+                            <a class="nav-link" href="#" onclick="showSection('admin'); loadAllUsers()">
+                                <i class="fa-solid fa-shield-halved"></i> Admin Control
+                            </a>
+                        </li>
+                    </ul>
+
+                    
+                    <div class="user-profile mt-auto">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="avatar me-3 shadow-sm" id="userInitials">--</div>
+                            <div class="overflow-hidden">
+                                <h6 class="mb-0 fw-bold text-truncate text-dark" id="userNameDisplay">Loading...</h6>
+                                <span class="badge bg-success text-uppercase mt-1" id="userRoleDisplay"
+                                    style="letter-spacing: 0.5px;">Loading...</span>
+                            </div>
+                        </div>
+                        
+                        <button id="logoutBtn"
+                            class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center fw-medium shadow-sm">
+                            <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            
+            <main class="col-md-9 ms-sm-auto col-lg-10 main-content">
+                <header class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4">
+                    <div>
+                        <h1 class="h2 fw-bold text-dark mb-1" id="welcomeMessage">Welcome back</h1>
+                        <p class="text-muted mb-0">Here is what's happening today.</p>
+                    </div>
+                </header>
+
+                <!-- Overview Section -->
+                <section id="overviewSection">
+                    <section class="row g-4 mb-5">
+                        <div class="col-md-4">
+                            <div class="card stat-card h-100 p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stat-icon me-3 bg-sky-subtle text-sky">
+                                        <i class="fa-solid fa-server"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0 fw-bold fs-2 text-dark">99.9%</h3>
+                                        <p class="text-muted mb-0 small fw-medium text-uppercase tracking-wide">System
+                                            Uptime</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stat-card h-100 p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stat-icon me-3 bg-success bg-opacity-10 text-success">
+                                        <i class="fa-solid fa-shield-halved"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0 fw-bold fs-2 text-dark">Secure</h3>
+                                        <p class="text-muted mb-0 small fw-medium text-uppercase tracking-wide">Access
+                                            Status</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card stat-card h-100 p-4">
+                                <div class="d-flex align-items-center">
+                                    <div class="stat-icon me-3 bg-warning bg-opacity-10 text-warning">
+                                        <i class="fa-solid fa-clock-rotate-left"></i>
+                                    </div>
+                                    <div>
+                                        <h3 class="mb-0 fw-bold fs-2 text-dark" id="sessionTime">Recent</h3>
+                                        <p class="text-muted mb-0 small fw-medium text-uppercase tracking-wide">Last
+                                            Activity</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
+                <!-- Admin Section -->
+                <section id="adminSection" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-danger text-white">
+                            <h5 class="mb-0"><i class="fa-solid fa-shield-halved me-2"></i>Admin Control Panel</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Full Name</th>
+                                            <th>Username</th>
+                                            <th>Email</th>
+                                            <th>Contact</th>
+                                            <th>Account Type</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="usersTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading users...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <div class="flex-grow-1"></div>
+
+                
+                <footer
+                    class="d-flex flex-wrap justify-content-between align-items-center py-4 mt-auto border-top text-muted small bg-white rounded-3 p-3 shadow-sm">
+                    <div class="col-md-4 d-flex align-items-center">
+                        <span class="mb-3 mb-md-0 fw-medium">&copy; 2026 GenTri's Best OTOP. All rights reserved.</span>
+                    </div>
+
+                    <ul class="nav col-md-8 justify-content-end list-unstyled d-flex flex-wrap gap-3">
+                        <li><a class="text-sky text-decoration-none fw-medium" href="#">Privacy Policy</a></li>
+                        <li><a class="text-sky text-decoration-none fw-medium" href="#">Terms of Service</a></li>
+                        <li><a class="text-sky text-decoration-none fw-medium" href="#">Help Center</a></li>
+                        <li><a class="text-sky text-decoration-none fw-medium" href="#">Contact Support</a></li>
+                    </ul>
+                </footer>
+            </main>
+        </div>
+    </div>
+
+    <!-- Custom Modal for Admin Actions -->
+    <div class="modal fade" id="adminModal" tabindex="-1" aria-labelledby="adminModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header" id="modalHeader">
+                    <h5 class="modal-title" id="adminModalLabel">Action</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    Content here
+                </div>
+                <div class="modal-footer" id="modalFooter">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>

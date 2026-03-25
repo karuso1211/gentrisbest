@@ -1,0 +1,190 @@
+document.addEventListener('DOMContentLoaded', () => {
+
+    const VALID_USERS = [
+        { username: 'admin', password: 'password123' },
+        { username: 'manager', password: 'password123' },
+        { username: 'user', password: 'password123' }
+    ];
+
+    const togglePasswordBtn = document.getElementById('togglePasswordBtn');
+    const passwordField = document.getElementById('password');
+    const togglePasswordIcon = document.getElementById('togglePasswordIcon');
+
+    if (togglePasswordBtn && passwordField) {
+        togglePasswordBtn.addEventListener('click', () => {
+            const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordField.setAttribute('type', type);
+
+            if (type === 'password') {
+                togglePasswordIcon.classList.remove('fa-eye-slash');
+                togglePasswordIcon.classList.add('fa-eye');
+            } else {
+                togglePasswordIcon.classList.remove('fa-eye');
+                togglePasswordIcon.classList.add('fa-eye-slash');
+            }
+        });
+    }
+
+    const loginForm = document.getElementById('loginForm');
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const usernameInput = document.getElementById('username').value.trim();
+            const passwordInput = document.getElementById('password').value;
+            const roleInput = document.getElementById('role').value;
+
+            const errorBox = document.getElementById('errorBox');
+            const errorText = document.getElementById('errorText');
+
+            errorBox.classList.add('d-none');
+            errorBox.classList.remove('d-flex');
+
+            const isValid = VALID_USERS.some(u =>
+                u.username.toLowerCase() === usernameInput.toLowerCase() &&
+                u.password === passwordInput
+            );
+
+            if (isValid) {
+                let displayName = "Student User";
+                if (roleInput === "Admin") displayName = "System Administrator";
+                if (roleInput === "Manager") displayName = "Operations Manager";
+
+                const userSession = {
+                    username: usernameInput,
+                    role: roleInput,
+                    name: displayName
+                };
+
+                sessionStorage.setItem('gentrisbest_session', JSON.stringify(userSession));
+
+                const btn = loginForm.querySelector('button');
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Authenticating...';
+
+                setTimeout(() => {
+                    window.location.href = 'GenTrisBest_Dashboard.html';
+                }, 800);
+
+            } else {
+                errorText.textContent = "Invalid username or password. Default is (admin/password123)";
+                errorBox.classList.remove('d-none');
+                errorBox.classList.add('d-flex');
+
+                loginForm.classList.add('shake');
+                setTimeout(() => loginForm.classList.remove('shake'), 400);
+            }
+        });
+    }
+
+    const registerForm = document.getElementById('registerForm');
+
+    if (registerForm) {
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirmPassword');
+
+        const validatePasswordMatch = () => {
+            if (passwordInput.value !== confirmPasswordInput.value) {
+                confirmPasswordInput.setCustomValidity("Passwords do not match");
+            } else {
+                confirmPasswordInput.setCustomValidity("");
+            }
+        };
+
+        if (passwordInput && confirmPasswordInput) {
+            passwordInput.addEventListener('change', validatePasswordMatch);
+            confirmPasswordInput.addEventListener('keyup', validatePasswordMatch);
+        }
+
+        registerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const password = passwordInput.value;
+            const confirmPassword = confirmPasswordInput.value;
+            const errorBox = document.getElementById('errorBox');
+            const successBox = document.getElementById('successBox');
+
+            if (errorBox) {
+                errorBox.classList.add('d-none');
+                errorBox.classList.remove('d-flex');
+            }
+            if (successBox) {
+                successBox.classList.add('d-none');
+                successBox.classList.remove('d-flex');
+            }
+
+            if (password !== confirmPassword) {
+                if (errorBox) {
+                    errorBox.classList.remove('d-none');
+                    errorBox.classList.add('d-flex');
+                }
+                registerForm.classList.add('shake');
+                setTimeout(() => registerForm.classList.remove('shake'), 400);
+                return;
+            }
+
+            if (successBox) {
+                successBox.classList.remove('d-none');
+                successBox.classList.add('d-flex');
+            }
+
+            const btn = registerForm.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Registering...';
+                btn.disabled = true;
+            }
+
+            setTimeout(() => {
+                registerForm.submit();
+            }, 1000);
+        });
+    }
+
+    const dashboardLayout = document.querySelector('.dashboard-layout');
+
+    if (dashboardLayout) {
+        const sessionData = sessionStorage.getItem('gentrisbest_session');
+
+        if (!sessionData) {
+            window.location.replace('GenTrisBest_Login.html');
+            return;
+        }
+
+        const user = JSON.parse(sessionData);
+
+        const nameDisplay = document.getElementById('userNameDisplay');
+        const roleDisplay = document.getElementById('userRoleDisplay');
+        const initialsDisplay = document.getElementById('userInitials');
+        const welcomeMessage = document.getElementById('welcomeMessage');
+
+        nameDisplay.textContent = user.name;
+        roleDisplay.textContent = user.role;
+        welcomeMessage.textContent = `Welcome back, ${user.username}`;
+
+        const initials = user.name.split(' ')
+            .map(n => n[0])
+            .join('')
+            .toUpperCase()
+            .substring(0, 2);
+        initialsDisplay.textContent = initials;
+
+        if (user.role === 'Admin') {
+            document.querySelector('.avatar').classList.remove('bg-sky');
+            document.querySelector('.avatar').classList.add('bg-danger');
+        } else if (user.role === 'Manager') {
+            document.querySelector('.avatar').classList.remove('bg-sky');
+            document.querySelector('.avatar').classList.add('bg-warning');
+            document.querySelector('.avatar').classList.add('text-dark');
+        }
+
+        const logoutBtn = document.getElementById('logoutBtn');
+        logoutBtn.addEventListener('click', () => {
+            const confirmLogout = confirm('Are you sure you want to log out?');
+
+            if (confirmLogout) {
+                sessionStorage.removeItem('gentrisbest_session');
+                window.location.replace('GenTrisBest_Login.html');
+            }
+        });
+    }
+});
