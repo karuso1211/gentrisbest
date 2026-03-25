@@ -207,6 +207,97 @@ if ($action === 'get_available_products') {
         echo json_encode(['success' => false, 'error' => 'Failed to cancel order']);
     }
     
+} elseif ($action === 'confirm_delivery') {
+    // Confirm delivery of an order
+    $orderId = isset($_POST['orderId']) ? intval($_POST['orderId']) : null;
+    
+    if (!$orderId) {
+        echo json_encode(['success' => false, 'error' => 'Invalid order ID']);
+        exit();
+    }
+    
+    // Get order details
+    $orderSql = "SELECT Orders.OrderID, Orders.Status, Orders.Username FROM Orders WHERE OrderID = ?";
+    $orderParams = array($orderId);
+    $orderResult = sqlsrv_query($conn, $orderSql, $orderParams);
+    
+    if (!$orderResult || !($order = sqlsrv_fetch_array($orderResult, SQLSRV_FETCH_ASSOC))) {
+        echo json_encode(['success' => false, 'error' => 'Order not found']);
+        exit();
+    }
+    
+    // Check if only SHIPPED orders can be marked as delivered
+    if ($order['Status'] !== 'SHIPPED') {
+        echo json_encode(['success' => false, 'error' => 'Only SHIPPED orders can be marked as delivered']);
+        exit();
+    }
+    
+    // Check if user is the order owner
+    if ($username !== $order['Username']) {
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit();
+    }
+    
+    // Update order status to DELIVERED
+    $updateSql = "UPDATE Orders SET Status = 'DELIVERED' WHERE OrderID = ?";
+    $updateParams = array($orderId);
+    
+    if (sqlsrv_query($conn, $updateSql, $updateParams)) {
+        echo json_encode(['success' => true, 'message' => 'Order marked as delivered successfully']);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to confirm delivery']);
+    }
+
+} elseif ($action === 'update_order_status') {
+    // Update order status (Manager/Admin only)
+    $orderId = isset($_POST['orderId']) ? intval($_POST['orderId']) : null;
+    $newStatus = isset($_POST['status']) ? trim($_POST['status']) : null;
+    
+    if (!$orderId || !$newStatus) {
+        echo json_encode(['success' => false, 'error' => 'Invalid order ID or status']);
+        exit();
+    }
+    
+    // Check if user has permission (ADMIN, INVENTORY, MANAGER only)
+    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit();
+    }
+    
+    // Validate status is one of allowed values
+    $allowedStatuses = ['PENDING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+    if (!in_array($newStatus, $allowedStatuses)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid status']);
+        exit();
+    }
+    
+    // Get order details
+    $orderSql = "SELECT Orders.OrderID, Orders.Status FROM Orders WHERE OrderID = ?";
+    $orderParams = array($orderId);
+    $orderResult = sqlsrv_query($conn, $orderSql, $orderParams);
+    
+    if (!$orderResult || !($order = sqlsrv_fetch_array($orderResult, SQLSRV_FETCH_ASSOC))) {
+        echo json_encode(['success' => false, 'error' => 'Order not found']);
+        exit();
+    }
+    
+    // Allow managers to update PENDING orders to SHIPPED or DELIVERED
+    if ($order['Status'] !== 'PENDING') {
+        echo json_encode(['success' => false, 'error' => 'Only PENDING orders can be updated by managers']);
+        exit();
+    }
+    
+    // Update order status
+    $updateSql = "UPDATE Orders SET Status = ? WHERE OrderID = ?";
+    $updateParams = array($newStatus, $orderId);
+    
+    if (sqlsrv_query($conn, $updateSql, $updateParams)) {
+        $statusMessage = ($newStatus === 'SHIPPED') ? 'marked as shipped' : 'marked as delivered';
+        echo json_encode(['success' => true, 'message' => 'Order ' . $statusMessage . ' successfully']);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to update order status']);
+    }
+    
 } else {
     echo json_encode(['success' => false, 'error' => 'Invalid action']);
 }

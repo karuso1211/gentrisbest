@@ -155,6 +155,25 @@
             color: white;
         }
 
+        .btn-order-fixed {
+            position: sticky;
+            bottom: 0;
+            width: 100%;
+            z-index: 50;
+            margin-top: auto;
+            box-shadow: 0 -2px 8px rgba(14, 165, 233, 0.15);
+        }
+
+        .product-card-body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .product-button-wrapper {
+            margin-top: auto;
+            padding-top: 1rem;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 width: 100%;
@@ -244,13 +263,12 @@
                     </div>
                 </div>
             </nav>
-
-            
+         
             <main class="col-md-9 ms-sm-auto col-lg-10 main-content">
                 <header class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center mb-4">
                     <div>
                         <h1 class="h2 fw-bold text-dark mb-1" id="welcomeMessage">Welcome back</h1>
-                        <p class="text-muted mb-0">Here is what's happening today.</p>
+                        <p class="text-muted mb-0">Dairy? It's on me!</p>
                     </div>
                 </header>
 
@@ -299,11 +317,11 @@
                                     <span class="input-group-text bg-white border-end-0">
                                         <i class="fa-solid fa-magnifying-glass text-sky"></i>
                                     </span>
-                                    <input type="text" class="form-control border-start-0" id="searchBrowseProducts" placeholder="Search by product name or category...">
+                                    <input type="text" autocomplete="off" class="form-control border-start-0" id="searchBrowseProducts" placeholder="Search by product name or category...">
                                 </div>
                             </div>
                             <div class="row" id="browseProductsContainer">
-                                <div class="col-12 text-center text-muted py-5">
+                                <div class="col-12 text-center text-muted py-5" >
                                     <i class="fa-solid fa-spinner fa-spin me-2"></i> Loading products...
                                 </div>
                             </div>
@@ -319,21 +337,35 @@
                             <span class="badge bg-light text-sky" id="orderHistoryCount">0 orders</span>
                         </div>
                         <div class="card-body">
+                            <div class="mb-4" id="searchBarContainer" style="display: none;">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white border-end-0">
+                                        <i class="fa-solid fa-magnifying-glass text-sky"></i>
+                                    </span>
+                                    <input type="text" autocomplete="off" class="form-control border-start-0" id="searchOrdersInput" placeholder="Search by customer name, order #, or product...">
+                                    <button class="btn btn-outline-secondary" type="button" id="clearSearchOrdersBtn">
+                                        <i class="fa-solid fa-times"></i>
+                                    </button>
+                                </div>
+                                <small class="text-muted d-block mt-2" id="searchOrdersInfo" style="display: none;">Searching in <strong id="searchOrdersResultText"></strong></small>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead class="table-light">
                                         <tr>
                                             <th>Order #</th>
+                                            <th id="customerHeaderCol" style="display: none;">Customer</th>
                                             <th>Product</th>
                                             <th>Quantity</th>
                                             <th>Total Price</th>
                                             <th>Order Date</th>
                                             <th>Status</th>
+                                            <th style="text-align: center;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="orderHistoryTableBody">
                                         <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">
+                                            <td colspan="8" class="text-center text-muted py-4">
                                                 <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading order history...
                                             </td>
                                         </tr>
@@ -354,7 +386,7 @@
                                     <h5 class="mb-0"><i class="fa-solid fa-box me-2"></i>Add New Product</h5>
                                 </div>
                                 <div class="card-body">
-                                    <form id="addProductForm">
+                                    <form id="addProductForm" autocomplete="off">
                                         <div class="mb-3">
                                             <label for="productName" class="form-label fw-medium">Product Name</label>
                                             <input type="text" class="form-control" id="productName" placeholder="Enter product name" required>
@@ -398,7 +430,7 @@
                                             <span class="input-group-text bg-white border-end-0">
                                                 <i class="fa-solid fa-magnifying-glass text-sky"></i>
                                             </span>
-                                            <input type="text" class="form-control border-start-0" id="searchProducts" placeholder="Search by product name or category...">
+                                            <input type="text" autocomplete="off" class="form-control border-start-0" id="searchProducts" placeholder="Search by product name or category...">
                                             <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">
                                                 <i class="fa-solid fa-times"></i>
                                             </button>
@@ -438,7 +470,7 @@
                 <footer
                     class="d-flex flex-wrap justify-content-between align-items-center py-4 mt-auto border-top text-muted small bg-white rounded-3 p-3 shadow-sm">
                     <div class="col-md-4 d-flex align-items-center">
-                        <span class="mb-3 mb-md-0 fw-medium">&copy; 2026 GenTri's Best OTOP. All rights reserved.</span>
+                        <span class="mb-3 mb-md-0 fw-medium">&copy; 2026 GenTri's Best. All rights reserved.</span>
                     </div>
 
                     <ul class="nav col-md-8 justify-content-end list-unstyled d-flex flex-wrap gap-3">

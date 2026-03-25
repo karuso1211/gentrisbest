@@ -683,7 +683,7 @@ function displayBrowseProducts(products) {
         productCard.className = 'col-md-4 mb-4';
         productCard.innerHTML = `
             <div class="card border-0 shadow-sm h-100 ${isOutOfStock ? 'opacity-75' : ''}">
-                <div class="card-body">
+                <div class="card-body product-card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h6 class="card-title fw-bold">${product.ProductName}</h6>
                         <span class="badge ${product.Quantity > 0 ? 'bg-success' : 'bg-danger'}">
@@ -696,12 +696,14 @@ function displayBrowseProducts(products) {
                         <span class="h5 mb-0 text-sky fw-bold">₱${parseFloat(product.Price).toFixed(2)}</span>
                         <span class="${stockClass} fw-bold">${product.Quantity} in stock</span>
                     </div>
-                    ${isOutOfStock ? 
-                        '<button class="btn btn-secondary w-100" disabled><i class="fa-solid fa-times me-2"></i>Out of Stock</button>' :
-                        `<button class="btn btn-sky w-100" onclick="showOrderModal(${product.ProductID}, '${product.ProductName}', ${product.Price})">
-                            <i class="fa-solid fa-shopping-cart me-2"></i>Order Now
-                        </button>`
-                    }
+                    <div class="product-button-wrapper">
+                        ${isOutOfStock ? 
+                            '<button class="btn btn-secondary w-100" disabled><i class="fa-solid fa-times me-2"></i>Out of Stock</button>' :
+                            `<button class="btn btn-sky w-100 btn-order-fixed" onclick="showOrderModal(${product.ProductID}, '${product.ProductName}', ${product.Price})">
+                                <i class="fa-solid fa-shopping-cart me-2"></i>Order Now
+                            </button>`
+                        }
+                    </div>
                 </div>
             </div>
         `;
@@ -849,45 +851,140 @@ function setupBrowseSearchListener() {
 }
 
 function loadOrderHistory() {
-    fetch('customer_api.php?action=get_order_history')
-        .then(response => response.json())
+    // Check if user is admin, manager, or inventory staff - if so, load all orders
+    const isAdmin = window.currentUser && ['ADMIN', 'MANAGER', 'INVENTORY'].includes(window.currentUser.accountType);
+    const apiAction = isAdmin ? 'get_all_orders' : 'get_order_history';
+    
+    console.log('Loading order history - isAdmin:', isAdmin, 'action:', apiAction);
+    
+    fetch(`customer_api.php?action=${apiAction}`)
+        .then(response => {
+            console.log('Response status:', response.status);
+            return response.json();
+        })
         .then(data => {
+            console.log('API Response:', data);
             if (data.success) {
-                displayOrderHistory(data.orders);
+                displayOrderHistory(data.orders, isAdmin);
             } else {
                 const tableBody = document.getElementById('orderHistoryTableBody');
                 if (tableBody) {
-                    tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Error loading order history</td></tr>';
+                    const errorMsg = data.error || 'Unknown error';
+                    console.error('API Error:', errorMsg);
+                    tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4">Error: ${errorMsg}</td></tr>`;
                 }
             }
         })
         .catch(error => {
-            console.error('Error:', error);
+            console.error('Fetch Error:', error);
             const tableBody = document.getElementById('orderHistoryTableBody');
             if (tableBody) {
-                tableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Error loading order history</td></tr>';
+                tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Error loading order history: ' + error.message + '</td></tr>';
             }
         });
 }
 
-function displayOrderHistory(orders) {
+function displayOrderHistory(orders, isAdmin = false) {
     const tableBody = document.getElementById('orderHistoryTableBody');
     const orderCount = document.getElementById('orderHistoryCount');
+    const headerTitle = document.querySelector('#analyticsSection h5');
+    const customerHeaderCol = document.getElementById('customerHeaderCol');
+    const searchBarContainer = document.getElementById('searchBarContainer');
+    const searchOrdersInput = document.getElementById('searchOrdersInput');
+    const clearSearchOrdersBtn = document.getElementById('clearSearchOrdersBtn');
     
     if (!tableBody) return;
+    
+    // Store all orders globally for filtering
+    window.allOrdersData = orders;
+    window.isAdminView = isAdmin;
+    
+    console.log('displayOrderHistory - isAdmin:', isAdmin, 'currentUser:', window.currentUser, 'accountType:', window.currentUser?.accountType);
+    
+    // Show/hide customer column header based on admin status
+    if (customerHeaderCol) {
+        customerHeaderCol.style.display = isAdmin ? 'table-cell' : 'none';
+    }
+    
+    // Show/hide search bar for admin view
+    if (searchBarContainer) {
+        searchBarContainer.style.display = isAdmin ? 'block' : 'none';
+    }
+    
+    // Setup search functionality for admin
+    if (isAdmin && searchOrdersInput && clearSearchOrdersBtn) {
+        searchOrdersInput.addEventListener('input', filterOrderHistory);
+        clearSearchOrdersBtn.addEventListener('click', function() {
+            searchOrdersInput.value = '';
+            filterOrderHistory();
+        });
+    }
+    
+    // Update header title based on whether showing all orders or just user's orders
+    if (headerTitle) {
+        headerTitle.innerHTML = isAdmin 
+            ? '<i class="fa-solid fa-history me-2"></i>All Order History' 
+            : '<i class="fa-solid fa-history me-2"></i>My Order History';
+    }
     
     tableBody.innerHTML = '';
     orderCount.textContent = `${orders.length} order${orders.length !== 1 ? 's' : ''}`;
     
     if (orders.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4"><i class="fa-solid fa-inbox me-2"></i>No orders yet. Start by browsing our products!</td></tr>';
+        const colspan = isAdmin ? 8 : 8;
+        tableBody.innerHTML = `<tr><td colspan="${colspan}" class="text-center text-muted py-4"><i class="fa-solid fa-inbox me-2"></i>No orders found.</td></tr>`;
         return;
     }
+    
+    renderOrderRows(orders, isAdmin);
+}
+
+function filterOrderHistory() {
+    const searchInput = document.getElementById('searchOrdersInput').value.toLowerCase().trim();
+    const searchOrdersInfo = document.getElementById('searchOrdersInfo');
+    let filteredOrders = window.allOrdersData;
+    
+    if (searchInput) {
+        filteredOrders = window.allOrdersData.filter(order => {
+            const orderNumber = order.OrderNumber.toLowerCase();
+            const customerName = ((order.UserFullName || order.Username) || '').toLowerCase();
+            const productName = order.ProductName.toLowerCase();
+            
+            return orderNumber.includes(searchInput) || 
+                   customerName.includes(searchInput) || 
+                   productName.includes(searchInput);
+        });
+        
+        if (searchOrdersInfo) {
+            searchOrdersInfo.style.display = 'block';
+            document.getElementById('searchOrdersResultText').textContent = filteredOrders.length + ' match' + (filteredOrders.length !== 1 ? 'es' : '');
+        }
+    } else {
+        if (searchOrdersInfo) {
+            searchOrdersInfo.style.display = 'none';
+        }
+    }
+    
+    const tableBody = document.getElementById('orderHistoryTableBody');
+    tableBody.innerHTML = '';
+    
+    if (filteredOrders.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-search me-2"></i>No orders match your search.</td></tr>`;
+        return;
+    }
+    
+    renderOrderRows(filteredOrders, window.isAdminView);
+}
+
+function renderOrderRows(orders, isAdmin) {
+    const tableBody = document.getElementById('orderHistoryTableBody');
     
     orders.forEach(order => {
         const row = document.createElement('tr');
         const orderDate = new Date(order.OrderDate);
         const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        
+        console.log('Order:', order.OrderNumber, 'Status:', order.Status, 'isAdmin:', isAdmin);
         
         const statusBadge = `<span class="badge ${
             order.Status === 'PENDING' ? 'bg-warning' : 
@@ -896,15 +993,46 @@ function displayOrderHistory(orders) {
             'bg-success'
         }">${order.Status}</span>`;
         
-        // Show cancel button only for PENDING orders
-        const actionBtn = order.Status === 'PENDING' ? 
-            `<button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
-                <i class="fa-solid fa-times me-1"></i>Cancel
-            </button>` : 
-            '<span class="text-muted small">N/A</span>';
+        // Show appropriate action button based on order status and user role
+        let actionBtn;
+        if (isAdmin) {
+            // Manager/Admin view - show management buttons
+            if (order.Status === 'PENDING') {
+                actionBtn = `<div class="d-flex gap-2 justify-content-end">
+                    <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
+                        <i class="fa-solid fa-times me-1"></i>Cancel</button>
+                    <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
+                        <i class="fa-solid fa-truck me-1"></i>Ship</button>
+                    <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
+                        <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
+                </div>`;
+            } else {
+                actionBtn = '<span class="text-muted small">N/A</span>';
+            }
+        } else {
+            // Regular user view - show cancel/delivery buttons
+            if (order.Status === 'PENDING') {
+                actionBtn = `<div class="d-flex justify-content-end"><button class="btn btn-sm btn-danger w-100" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
+                    <i class="fa-solid fa-times me-1"></i>Cancel</button></div>`;
+            } else if (order.Status === 'SHIPPED') {
+                actionBtn = `<div class="d-flex justify-content-end"><button class="btn btn-sm btn-success w-100" onclick="showDeliveryConfirmModal(${order.OrderID}, '${order.OrderNumber}')">
+                    <i class="fa-solid fa-box-open me-1"></i>Confirm Delivery</button></div>`;
+            } else {
+                actionBtn = '<div class="d-flex justify-content-center"><span class="text-muted small">N/A</span></div>';
+            }
+        }
         
-        row.innerHTML = `
-            <td><strong>${order.OrderNumber}</strong></td>
+        // Build the row content
+        let rowContent = `
+            <td><strong>${order.OrderNumber}</strong></td>`;
+        
+        // Add customer name cell if showing all orders
+        if (isAdmin) {
+            const customerName = order.UserFullName || order.Username || 'Unknown';
+            rowContent += `<td>${customerName}</td>`;
+        }
+        
+        rowContent += `
             <td>${order.ProductName}</td>
             <td>${order.Quantity}</td>
             <td>₱${parseFloat(order.TotalPrice).toFixed(2)}</td>
@@ -912,6 +1040,8 @@ function displayOrderHistory(orders) {
             <td>${statusBadge}</td>
             <td>${actionBtn}</td>
         `;
+        
+        row.innerHTML = rowContent;
         tableBody.appendChild(row);
     });
 }
@@ -965,6 +1095,121 @@ function performCancelOrder(orderId) {
     .catch(error => {
         console.error('Error:', error);
         showModal('Error', 'Failed to cancel order', 'bg-danger', [
+            {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
+        ]);
+    });
+}
+
+function showDeliveryConfirmModal(orderId, orderNumber) {
+    showModal(
+        'Confirm Delivery',
+        `<p class="mb-3"><strong>Have you received this order?</strong></p>
+        <p class="mb-0"><strong>Order Number:</strong> ${orderNumber}</p>
+        <div class="alert alert-success mt-3 mb-0">
+            <i class="fa-solid fa-truck me-2"></i>
+            Click "Confirm Delivery" to mark this order as delivered.
+        </div>`,
+        'bg-success',
+        [
+            {text: 'Not Yet', class: 'btn btn-secondary', dataDismiss: true},
+            {text: 'Confirm Delivery', class: 'btn btn-success', onclick: () => performDeliveryConfirm(orderId)}
+        ]
+    );
+}
+
+function performDeliveryConfirm(orderId) {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+    if (modal) modal.hide();
+    
+    const formData = new FormData();
+    formData.append('action', 'confirm_delivery');
+    formData.append('orderId', orderId);
+    
+    fetch('customer_api.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showModal(
+                'Delivery Confirmed',
+                `<p class="mb-0"><i class="fa-solid fa-check-circle text-success me-2"></i>Your order has been marked as delivered successfully!</p>`,
+                'bg-success',
+                [{text: 'Close', class: 'btn btn-success', dataDismiss: true, onclick: () => {
+                    setTimeout(loadOrderHistory, 300);
+                }}]
+            );
+        } else {
+            showModal('Error', `Failed to confirm delivery: ${data.error}`, 'bg-danger', [
+                {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
+            ]);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showModal('Error', 'Failed to confirm delivery', 'bg-danger', [
+            {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
+        ]);
+    });
+}
+
+function showUpdateStatusModal(orderId, orderNumber, newStatus) {
+    const statusText = newStatus === 'SHIPPED' ? 'ship' : 'mark as delivered';
+    const statusTitle = newStatus === 'SHIPPED' ? 'Ship Order' : 'Mark Order as Delivered';
+    const statusIcon = newStatus === 'SHIPPED' ? 'fa-truck' : 'fa-box-open';
+    const headerBg = newStatus === 'SHIPPED' ? 'bg-primary' : 'bg-success';
+    
+    showModal(
+        statusTitle,
+        `<p class="mb-3"><strong>Are you sure you want to ${statusText} this order?</strong></p>
+        <p class="mb-0"><strong>Order Number:</strong> ${orderNumber}</p>
+        <div class="alert alert-info mt-3 mb-0">
+            <i class="fa-solid ${statusIcon} me-2"></i>
+            The customer will be notified of the status change.
+        </div>`,
+        headerBg,
+        [
+            {text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true},
+            {text: statusTitle, class: newStatus === 'SHIPPED' ? 'btn btn-primary' : 'btn btn-success', onclick: () => performUpdateStatus(orderId, newStatus)}
+        ]
+    );
+}
+
+function performUpdateStatus(orderId, newStatus) {
+    const modal = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+    if (modal) modal.hide();
+    
+    const formData = new FormData();
+    formData.append('action', 'update_order_status');
+    formData.append('orderId', orderId);
+    formData.append('status', newStatus);
+    
+    fetch('customer_api.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const statusMsg = newStatus === 'SHIPPED' ? 'shipped' : 'delivered';
+            showModal(
+                'Order Updated',
+                `<p class="mb-0"><i class="fa-solid fa-check-circle text-success me-2"></i>Order has been marked as ${statusMsg} successfully!</p>`,
+                'bg-success',
+                [{text: 'Close', class: 'btn btn-success', dataDismiss: true, onclick: () => {
+                    setTimeout(loadOrderHistory, 300);
+                }}]
+            );
+        } else {
+            showModal('Error', `Failed to update order: ${data.error}`, 'bg-danger', [
+                {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
+            ]);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showModal('Error', 'Failed to update order status', 'bg-danger', [
             {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
         ]);
     });

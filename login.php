@@ -16,13 +16,14 @@ $username = $_POST['username'];
 $password = $_POST['password'];
 
 // Prepared statement to prevent SQL injection
-$sql = "SELECT * FROM Users WHERE Username = ? AND Password = ?";
+$sql = "SELECT AccountType FROM Users WHERE Username = ? AND Password = ?";
 $params = array($username, $password);
 $stmt = sqlsrv_query($conn, $sql, $params);
 
-if ($stmt && sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+if ($stmt && $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
     // ✅ Account found - set session
     $_SESSION['username'] = $username;
+    $_SESSION['accountType'] = $row['AccountType'] ? $row['AccountType'] : 'USER';
     
     // Return JSON success instead of redirecting
     header('Content-Type: application/json');
