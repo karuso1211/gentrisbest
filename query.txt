@@ -6,4 +6,36 @@ CREATE TABLE Users (
     ContactNumber NVARCHAR(20) NOT NULL,
     Email NVARCHAR(100) NOT NULL UNIQUE,
     Password NVARCHAR(255) NOT NULL,
+    AccountType NVARCHAR(50) DEFAULT 'USER'
+);
+
+CREATE TABLE Products (
+    ProductID INT IDENTITY(1,1) PRIMARY KEY,
+    ProductName NVARCHAR(100) NOT NULL,
+    Description NVARCHAR(500),
+    Category NVARCHAR(50),
+    Price DECIMAL(10, 2) NOT NULL,
+    Quantity INT NOT NULL DEFAULT 0,
+    DateAdded DATETIME DEFAULT GETDATE(),
+    AddedBy NVARCHAR(50) NOT NULL,
+    LastModified DATETIME DEFAULT GETDATE(),
+    ModifiedBy NVARCHAR(50),
+    Status NVARCHAR(20) DEFAULT 'ACTIVE'
+);
+
+CREATE TABLE Orders (
+    OrderID INT IDENTITY(1,1) PRIMARY KEY,
+    OrderNumber NVARCHAR(50) NOT NULL UNIQUE,
+    Username NVARCHAR(50) NOT NULL,
+    ProductID INT NOT NULL,
+    ProductName NVARCHAR(100) NOT NULL,
+    Quantity INT NOT NULL,
+    UnitPrice DECIMAL(10, 2) NOT NULL,
+    TotalPrice DECIMAL(10, 2) NOT NULL,
+    OrderDate DATETIME DEFAULT GETDATE(),
+    Status NVARCHAR(20) DEFAULT 'PENDING',
+    DeliveryDate DATETIME,
+    Notes NVARCHAR(500),
+    FOREIGN KEY (ProductID) REFERENCES Products(ProductID),
+    FOREIGN KEY (Username) REFERENCES Users(Username)
 );

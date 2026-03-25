@@ -143,6 +143,18 @@
             background-color: var(--sky-blue);
         }
 
+        .btn-sky {
+            background-color: var(--sky-blue);
+            border-color: var(--sky-blue);
+            color: white;
+        }
+
+        .btn-sky:hover {
+            background-color: var(--sky-blue-hover);
+            border-color: var(--sky-blue-hover);
+            color: white;
+        }
+
         @media (max-width: 768px) {
             .sidebar {
                 width: 100%;
@@ -178,20 +190,25 @@
                 <div class="sidebar-sticky d-flex flex-column flex-grow-1 py-3 bg-white">
                     <ul class="nav flex-column mb-auto">
                         <li class="nav-item">
-                            <a class="nav-link active" aria-current="page" href="#" onclick="showSection('overview')">
-                                <i class="fa-solid fa-house"></i> Overview
+                            <a class="nav-link active" aria-current="page" href="#" onclick="showSection('products'); loadBrowseProducts()">
+                                <i class="fa-solid fa-store"></i> Products
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#" onclick="showSection('analytics')">
-                                <i class="fa-solid fa-chart-pie"></i> Analytics
+                            <a class="nav-link" href="#" onclick="showSection('analytics'); loadOrderHistory()">
+                                <i class="fa-solid fa-history"></i> Order History
                             </a>
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" id="inventoryNavItem" style="display: none;">
+                            <a class="nav-link" href="#" onclick="showSection('inventory'); loadInventory()">
+                                <i class="fa-solid fa-boxes-stacked"></i> Inventory
+                            </a>
+                        </li>
+                        <!-- <li class="nav-item">
                             <a class="nav-link" href="#" onclick="showSection('team')">
                                 <i class="fa-solid fa-users"></i> Team
                             </a>
-                        </li>
+                        </li> -->
                         <li class="nav-item">
                             <a class="nav-link" href="#" onclick="showSection('reports')">
                                 <i class="fa-solid fa-file-invoice"></i> Reports
@@ -237,55 +254,7 @@
                     </div>
                 </header>
 
-                <!-- Overview Section -->
-                <section id="overviewSection">
-                    <section class="row g-4 mb-5">
-                        <div class="col-md-4">
-                            <div class="card stat-card h-100 p-4">
-                                <div class="d-flex align-items-center">
-                                    <div class="stat-icon me-3 bg-sky-subtle text-sky">
-                                        <i class="fa-solid fa-server"></i>
-                                    </div>
-                                    <div>
-                                        <h3 class="mb-0 fw-bold fs-2 text-dark">99.9%</h3>
-                                        <p class="text-muted mb-0 small fw-medium text-uppercase tracking-wide">System
-                                            Uptime</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card stat-card h-100 p-4">
-                                <div class="d-flex align-items-center">
-                                    <div class="stat-icon me-3 bg-success bg-opacity-10 text-success">
-                                        <i class="fa-solid fa-shield-halved"></i>
-                                    </div>
-                                    <div>
-                                        <h3 class="mb-0 fw-bold fs-2 text-dark">Secure</h3>
-                                        <p class="text-muted mb-0 small fw-medium text-uppercase tracking-wide">Access
-                                            Status</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card stat-card h-100 p-4">
-                                <div class="d-flex align-items-center">
-                                    <div class="stat-icon me-3 bg-warning bg-opacity-10 text-warning">
-                                        <i class="fa-solid fa-clock-rotate-left"></i>
-                                    </div>
-                                    <div>
-                                        <h3 class="mb-0 fw-bold fs-2 text-dark" id="sessionTime">Recent</h3>
-                                        <p class="text-muted mb-0 small fw-medium text-uppercase tracking-wide">Last
-                                            Activity</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-                </section>
-
-                <!-- Admin Section -->
+                <!-- Purchase History Section -->
                 <section id="adminSection" style="display: none;">
                     <div class="card border-0 shadow-sm">
                         <div class="card-header bg-danger text-white">
@@ -312,6 +281,152 @@
                                         </tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Products Browse Section -->
+                <section id="productsSection">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fa-solid fa-store me-2"></i>Browse Products</h5>
+                            <span class="badge bg-light text-sky" id="browseProductCount">0 available</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-4">
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white border-end-0">
+                                        <i class="fa-solid fa-magnifying-glass text-sky"></i>
+                                    </span>
+                                    <input type="text" class="form-control border-start-0" id="searchBrowseProducts" placeholder="Search by product name or category...">
+                                </div>
+                            </div>
+                            <div class="row" id="browseProductsContainer">
+                                <div class="col-12 text-center text-muted py-5">
+                                    <i class="fa-solid fa-spinner fa-spin me-2"></i> Loading products...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Order History Section -->
+                <section id="analyticsSection" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fa-solid fa-history me-2"></i>My Order History</h5>
+                            <span class="badge bg-light text-sky" id="orderHistoryCount">0 orders</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Order #</th>
+                                            <th>Product</th>
+                                            <th>Quantity</th>
+                                            <th>Total Price</th>
+                                            <th>Order Date</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="orderHistoryTableBody">
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted py-4">
+                                                <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading order history...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Inventory Section -->
+                <section id="inventorySection" style="display: none;">
+                    <div class="row g-4">
+                        <!-- Add Product Form -->
+                        <div class="col-lg-4">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-header bg-sky text-white">
+                                    <h5 class="mb-0"><i class="fa-solid fa-box me-2"></i>Add New Product</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="addProductForm">
+                                        <div class="mb-3">
+                                            <label for="productName" class="form-label fw-medium">Product Name</label>
+                                            <input type="text" class="form-control" id="productName" placeholder="Enter product name" required>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="productCategory" class="form-label fw-medium">Category</label>
+                                            <input type="text" class="form-control" id="productCategory" placeholder="e.g., Milk, Cheese, Yogurt">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="productDescription" class="form-label fw-medium">Description</label>
+                                            <textarea class="form-control" id="productDescription" rows="2" placeholder="Product description"></textarea>
+                                        </div>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="productPrice" class="form-label fw-medium">Price</label>
+                                                <input type="number" class="form-control" id="productPrice" placeholder="0.00" step="0.01" required>
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="productQuantity" class="form-label fw-medium">Quantity</label>
+                                                <input type="number" class="form-control" id="productQuantity" placeholder="0" value="0" required>
+                                            </div>
+                                        </div>
+                                        <button type="submit" class="btn btn-sky w-100 fw-medium">
+                                            <i class="fa-solid fa-plus me-2"></i>Add Product
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Products List -->
+                        <div class="col-lg-8">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0"><i class="fa-solid fa-list me-2"></i>Product Inventory</h5>
+                                    <span class="badge bg-light text-sky" id="productCount">0 products</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-4">
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white border-end-0">
+                                                <i class="fa-solid fa-magnifying-glass text-sky"></i>
+                                            </span>
+                                            <input type="text" class="form-control border-start-0" id="searchProducts" placeholder="Search by product name or category...">
+                                            <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn">
+                                                <i class="fa-solid fa-times"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted d-block mt-2" id="searchInfo" style="display: none;">Searching in <strong id="searchResultText"></strong></small>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Product Name</th>
+                                                    <th>Category</th>
+                                                    <th>Price</th>
+                                                    <th>Quantity</th>
+                                                    <th>Status</th>
+                                                    <th>Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="productsTableBody">
+                                                <tr>
+                                                    <td colspan="6" class="text-center text-muted py-4">
+                                                        <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading products...
+                                                    </td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

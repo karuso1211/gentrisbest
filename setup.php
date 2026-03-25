@@ -57,7 +57,66 @@ if (!$result || sqlsrv_fetch_array($result) === null) {
     $output[] = "✓ AccountType column already exists";
 }
 
-// Step 2: Create default admin account
+// Step 3: Create Products table if it doesn't exist
+$checkProductsTableSql = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='Products'";
+$productsTableResult = sqlsrv_query($conn, $checkProductsTableSql);
+
+if (!$productsTableResult || sqlsrv_fetch_array($productsTableResult) === null) {
+    $createProductsTableSql = "CREATE TABLE Products (
+        ProductID INT IDENTITY(1,1) PRIMARY KEY,
+        ProductName NVARCHAR(100) NOT NULL,
+        Description NVARCHAR(500),
+        Category NVARCHAR(50),
+        Price DECIMAL(10, 2) NOT NULL,
+        Quantity INT NOT NULL DEFAULT 0,
+        DateAdded DATETIME DEFAULT GETDATE(),
+        AddedBy NVARCHAR(50) NOT NULL,
+        LastModified DATETIME DEFAULT GETDATE(),
+        ModifiedBy NVARCHAR(50),
+        Status NVARCHAR(20) DEFAULT 'ACTIVE'
+    )";
+    
+    if (sqlsrv_query($conn, $createProductsTableSql)) {
+        $output[] = "✓ Created Products table";
+    } else {
+        $output[] = "✗ Failed to create Products table: " . print_r(sqlsrv_errors(), true);
+    }
+} else {
+    $output[] = "✓ Products table already exists";
+}
+
+// Step 4: Create Orders table if it doesn't exist
+$checkOrdersTableSql = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='Orders'";
+$ordersTableResult = sqlsrv_query($conn, $checkOrdersTableSql);
+
+if (!$ordersTableResult || sqlsrv_fetch_array($ordersTableResult) === null) {
+    $createOrdersTableSql = "CREATE TABLE Orders (
+        OrderID INT IDENTITY(1,1) PRIMARY KEY,
+        OrderNumber NVARCHAR(50) NOT NULL UNIQUE,
+        Username NVARCHAR(50) NOT NULL,
+        ProductID INT NOT NULL,
+        ProductName NVARCHAR(100) NOT NULL,
+        Quantity INT NOT NULL,
+        UnitPrice DECIMAL(10, 2) NOT NULL,
+        TotalPrice DECIMAL(10, 2) NOT NULL,
+        OrderDate DATETIME DEFAULT GETDATE(),
+        Status NVARCHAR(20) DEFAULT 'PENDING',
+        DeliveryDate DATETIME,
+        Notes NVARCHAR(500),
+        FOREIGN KEY (ProductID) REFERENCES Products(ProductID),
+        FOREIGN KEY (Username) REFERENCES Users(Username)
+    )";
+    
+    if (sqlsrv_query($conn, $createOrdersTableSql)) {
+        $output[] = "✓ Created Orders table";
+    } else {
+        $output[] = "✗ Failed to create Orders table: " . print_r(sqlsrv_errors(), true);
+    }
+} else {
+    $output[] = "✓ Orders table already exists";
+}
+
+// Step 5: Create default admin account
 $adminUsername = "admin123";
 $adminPassword = "password12345";
 
@@ -88,6 +147,9 @@ if ($stmt && sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         $output[] = "✗ Failed to create admin account: " . print_r(sqlsrv_errors(), true);
     }
 }
+
+
+
 
 sqlsrv_close($conn);
 ?>
