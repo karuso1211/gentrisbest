@@ -213,7 +213,7 @@
                                 <i class="fa-solid fa-store"></i> Products
                             </a>
                         </li>
-                        <li class="nav-item">
+                        <li class="nav-item" id="analyticsNavItem">
                             <a class="nav-link" href="#" onclick="showSection('analytics'); loadOrderHistory()">
                                 <i class="fa-solid fa-history"></i> Order History
                             </a>
@@ -223,12 +223,7 @@
                                 <i class="fa-solid fa-boxes-stacked"></i> Inventory
                             </a>
                         </li>
-                        <!-- <li class="nav-item">
-                            <a class="nav-link" href="#" onclick="showSection('team')">
-                                <i class="fa-solid fa-users"></i> Team
-                            </a>
-                        </li> -->
-                        <li class="nav-item">
+                        <li class="nav-item" id="reportsNavItem">
                             <a class="nav-link" href="#" onclick="showSection('reports')">
                                 <i class="fa-solid fa-file-invoice"></i> Reports
                             </a>
@@ -331,9 +326,43 @@
 
                 <!-- Order History Section -->
                 <section id="analyticsSection" style="display: none;">
+                    <!-- Today's Sales Container (Admin only) -->
+                    <div class="card border-0 shadow-sm mb-4" id="todaysSalesCard" style="display: none;">
+                        <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fa-solid fa-calendar me-2"></i>Today's Sales</h5>
+                            <span class="badge bg-light text-sky" id="todaysSalesCount">0 orders</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Order #</th>
+                                            <th>Customer</th>
+                                            <th>Product</th>
+                                            <th>Quantity</th>
+                                            <th>Total Price</th>
+                                            <th>Order Date</th>
+                                            <th>Status</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="todaysSalesTableBody">
+                                        <tr>
+                                            <td colspan="8" class="text-center text-muted py-4">
+                                                <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading today's sales...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- All Order History Container -->
                     <div class="card border-0 shadow-sm">
                         <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0"><i class="fa-solid fa-history me-2"></i>My Order History</h5>
+                            <h5 class="mb-0"><i class="fa-solid fa-history me-2"></i>All Order History</h5>
                             <span class="badge bg-light text-sky" id="orderHistoryCount">0 orders</span>
                         </div>
                         <div class="card-body">
@@ -360,7 +389,7 @@
                                             <th>Total Price</th>
                                             <th>Order Date</th>
                                             <th>Status</th>
-                                            <th style="text-align: center;">Action</th>
+                                            <div class=""><th>Action</th></div>     
                                         </tr>
                                     </thead>
                                     <tbody id="orderHistoryTableBody">
@@ -380,7 +409,8 @@
                 <section id="inventorySection" style="display: none;">
                     <div class="row g-4">
                         <!-- Add Product Form -->
-                        <div class="col-lg-4">
+                         <!-- class - made sure that the add part arent scaling with the list -->
+                        <div class="d-flex flex-column h-100 col-lg-4">
                             <div class="card border-0 shadow-sm h-100">
                                 <div class="card-header bg-sky text-white">
                                     <h5 class="mb-0"><i class="fa-solid fa-box me-2"></i>Add New Product</h5>
@@ -408,6 +438,11 @@
                                                 <label for="productQuantity" class="form-label fw-medium">Quantity</label>
                                                 <input type="number" class="form-control" id="productQuantity" placeholder="0" value="0" required>
                                             </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="productWholesalePrice" class="form-label fw-medium">Wholesale Price <span class="badge bg-info">Optional</span></label>
+                                            <small class="text-muted d-block mb-2">Applied when customer has 10+ orders</small>
+                                            <input type="number" class="form-control" id="productWholesalePrice" placeholder="0.00" step="0.01">
                                         </div>
                                         <button type="submit" class="btn btn-sky w-100 fw-medium">
                                             <i class="fa-solid fa-plus me-2"></i>Add Product
@@ -444,9 +479,10 @@
                                                     <th>Product Name</th>
                                                     <th>Category</th>
                                                     <th>Price</th>
+                                                    <th>Wholesale Price</th>
                                                     <th>Quantity</th>
                                                     <th>Status</th>
-                                                    <th>Action</th>
+                                                    <th id="actionColumn" name="actionColumn">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="productsTableBody">
@@ -458,6 +494,96 @@
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Reports Section -->
+                <section id="reportsSection" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-sky text-white">
+                            <h5 class="mb-0"><i class="fa-solid fa-file-invoice me-2"></i>Reports</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info" role="alert">
+                                <i class="fa-solid fa-info-circle me-2"></i>
+                                Reports feature coming soon. This section will provide detailed analytics and insights about your orders and transactions.
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Settings Section -->
+                <section id="settingsSection" style="display: none;">
+                    <div class="row g-4">
+                        <!-- Account Settings -->
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-sky text-white">
+                                    <h5 class="mb-0"><i class="fa-solid fa-user me-2"></i>Account Settings</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-medium">Username</label>
+                                        <input type="text" class="form-control" id="settingsUsername" disabled>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-medium">Email</label>
+                                        <input type="email" class="form-control" id="settingsEmail" disabled>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-medium">Contact Number</label>
+                                        <input type="tel" class="form-control" id="settingsContact" disabled>
+                                    </div>
+                                    <div class="mb-3" id="accountTypeField">
+                                        <label class="form-label fw-medium">Account Type</label>
+                                        <input type="text" class="form-control" id="settingsAccountType" disabled>
+                                    </div>
+                                    <button type="button" class="btn btn-sky w-100 fw-medium" id="editAccountBtn">
+                                        <i class="fa-solid fa-edit me-2"></i>Edit Account
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Preferences -->
+                        <div class="col-lg-6">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-sky text-white">
+                                    <h5 class="mb-0"><i class="fa-solid fa-sliders me-2"></i>Preferences</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="emailNotifications" checked>
+                                            <label class="form-check-label" for="emailNotifications">
+                                                Email Notifications
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="orderUpdates" checked>
+                                            <label class="form-check-label" for="orderUpdates">
+                                                Order Updates
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="promotions" checked>
+                                            <label class="form-check-label" for="promotions">
+                                                Promotional Offers
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <hr>
+                                    <h6 class="fw-medium mb-3">Danger Zone</h6>
+                                    <button type="button" class="btn btn-outline-danger w-100 fw-medium" id="changePasswordBtn">
+                                        <i class="fa-solid fa-lock me-2"></i>Change Password
+                                    </button>
                                 </div>
                             </div>
                         </div>

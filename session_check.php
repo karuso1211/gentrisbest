@@ -6,7 +6,15 @@ header('Content-Type: application/json');
 
 // Check if user is authenticated
 if (!isset($_SESSION['username'])) {
-    echo json_encode(['authenticated' => false]);
+    // Allow guest users to access limited features
+    echo json_encode([
+        'authenticated' => false, 
+        'isGuest' => true,
+        'username' => 'Guest',
+        'firstName' => 'Guest',
+        'lastName' => 'User',
+        'accountType' => 'GUEST'
+    ]);
     exit();
 }
 

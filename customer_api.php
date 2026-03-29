@@ -4,12 +4,6 @@ session_start();
 // Set JSON response header
 header('Content-Type: application/json');
 
-// Check if user is authenticated
-if (!isset($_SESSION['username'])) {
-    echo json_encode(['success' => false, 'error' => 'Not authenticated']);
-    exit();
-}
-
 $serverName = "DESKTOP-06731U1\SQLEXPRESS";
 $connectionOptions = [
     "Database" => "SOFTENG",
@@ -23,12 +17,18 @@ if ($conn === false) {
     exit();
 }
 
-$username = $_SESSION['username'];
 $action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? $_POST['action'] : null);
+$username = isset($_SESSION['username']) ? $_SESSION['username'] : null;
+
+// Allow guests to view products, but require authentication for other actions
+if ($action !== 'get_available_products' && !$username) {
+    echo json_encode(['success' => false, 'error' => 'Not authenticated']);
+    exit();
+}
 
 if ($action === 'get_available_products') {
     // Fetch only ACTIVE products with quantity > 0
-    $sql = "SELECT ProductID, ProductName, Description, Category, Price, Quantity, Status 
+    $sql = "SELECT ProductID, ProductName, Description, Category, Price, WholesalePrice, Quantity, Status 
             FROM Products 
             WHERE Status = 'ACTIVE' 
             ORDER BY ProductName";
@@ -49,9 +49,23 @@ if ($action === 'get_available_products') {
     
 } elseif ($action === 'place_order') {
     // Place an order
+    
+    // Check if user is admin, inventory, or manager - these roles cannot place orders
+    if (isset($_SESSION['accountType']) && in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+        echo json_encode(['success' => false, 'error' => 'Only regular users can place orders!']);
+        exit();
+    }
+    
     $productId = isset($_POST['productId']) ? intval($_POST['productId']) : null;
     $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : null;
     $notes = isset($_POST['notes']) ? trim($_POST['notes']) : null;
+    $paymentMethod = isset($_POST['paymentMethod']) ? trim($_POST['paymentMethod']) : 'Cash On Delivery';
+    
+    // Validate payment method
+    $validPaymentMethods = ['Cash On Delivery', 'GCASH', 'Card'];
+    if (!in_array($paymentMethod, $validPaymentMethods)) {
+        $paymentMethod = 'Cash On Delivery';
+    }
     
     // Validate inputs
     if (!$productId || !$quantity || $quantity <= 0) {
@@ -59,8 +73,8 @@ if ($action === 'get_available_products') {
         exit();
     }
     
-    // Get product details
-    $productSql = "SELECT ProductName, Price, Quantity FROM Products WHERE ProductID = ?";
+    // Get product details including wholesale price
+    $productSql = "SELECT ProductName, Price, WholesalePrice, Quantity FROM Products WHERE ProductID = ?";
     $productParams = array($productId);
     $productStmt = sqlsrv_query($conn, $productSql, $productParams);
     
@@ -75,17 +89,25 @@ if ($action === 'get_available_products') {
         exit();
     }
     
+    // Determine unit price: use wholesale price if quantity is 10+ units and wholesale price exists
+    $unitPrice = floatval($product['Price']);
+    $priceType = 'REGULAR';
+    
+    if ($quantity >= 10 && !is_null($product['WholesalePrice']) && floatval($product['WholesalePrice']) > 0) {
+        $unitPrice = floatval($product['WholesalePrice']);
+        $priceType = 'WHOLESALE';
+    }
+    
     // Generate order number
     $orderNumber = 'ORD-' . date('Ymd') . '-' . uniqid();
     
     // Calculate total price
-    $unitPrice = floatval($product['Price']);
     $totalPrice = $unitPrice * $quantity;
     
     // Insert order
-    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, Notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
-    $insertParams = array($orderNumber, $username, $productId, $product['ProductName'], $quantity, $unitPrice, $totalPrice, $notes);
+    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, PaymentMethod, Notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $insertParams = array($orderNumber, $username, $productId, $product['ProductName'], $quantity, $unitPrice, $totalPrice, $paymentMethod, $notes);
     
     if (sqlsrv_query($conn, $insertSql, $insertParams)) {
         // Reduce product quantity
@@ -97,7 +119,10 @@ if ($action === 'get_available_products') {
             'success' => true,
             'message' => 'Order placed successfully',
             'orderNumber' => $orderNumber,
-            'totalPrice' => number_format($totalPrice, 2)
+            'totalPrice' => number_format($totalPrice, 2),
+            'priceType' => $priceType,
+            'unitPrice' => number_format($unitPrice, 2),
+            'quantity' => $quantity
         ]);
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to place order']);
@@ -105,7 +130,7 @@ if ($action === 'get_available_products') {
     
 } elseif ($action === 'get_order_history') {
     // Fetch user's orders
-    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status
+    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, PaymentMethod
             FROM Orders
             WHERE Username = ?
             ORDER BY OrderDate DESC";
@@ -137,7 +162,7 @@ if ($action === 'get_available_products') {
     }
     
     // Fetch all orders with user information
-    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, 
+    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, PaymentMethod,
                    (SELECT CONCAT(FirstName, ' ', LastName) FROM Users WHERE Username = Orders.Username) AS UserFullName
             FROM Orders
             ORDER BY OrderDate DESC";
@@ -297,6 +322,38 @@ if ($action === 'get_available_products') {
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to update order status']);
     }
+
+} elseif ($action === 'get_today_sales') {
+    // Fetch today's orders only (ADMIN, INVENTORY, MANAGER only)
+    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit();
+    }
+    
+    // Fetch today's orders with user information - use database server's current date
+    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, PaymentMethod,
+                   (SELECT CONCAT(FirstName, ' ', LastName) FROM Users WHERE Username = Orders.Username) AS UserFullName
+            FROM Orders
+            WHERE CAST(OrderDate AS DATE) = CAST(GETDATE() AS DATE)
+            ORDER BY OrderDate DESC";
+    
+    $result = sqlsrv_query($conn, $sql);
+    
+    if ($result === false) {
+        echo json_encode(['success' => false, 'error' => 'Failed to fetch today\'s sales']);
+        exit();
+    }
+    
+    $orders = [];
+    while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
+        // Format OrderDate to ISO 8601 string for JavaScript
+        if ($row['OrderDate'] instanceof DateTime) {
+            $row['OrderDate'] = $row['OrderDate']->format('Y-m-d H:i:s');
+        }
+        $orders[] = $row;
+    }
+    
+    echo json_encode(['success' => true, 'orders' => $orders]);
     
 } else {
     echo json_encode(['success' => false, 'error' => 'Invalid action']);

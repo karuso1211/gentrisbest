@@ -34,8 +34,13 @@ CREATE TABLE Orders (
     TotalPrice DECIMAL(10, 2) NOT NULL,
     OrderDate DATETIME DEFAULT GETDATE(),
     Status NVARCHAR(20) DEFAULT 'PENDING',
+    PaymentMethod NVARCHAR(50) DEFAULT 'Cash On Delivery',
     DeliveryDate DATETIME,
     Notes NVARCHAR(500),
     FOREIGN KEY (ProductID) REFERENCES Products(ProductID),
     FOREIGN KEY (Username) REFERENCES Users(Username)
 );
+
+-- Add PaymentMethod column if it doesn't exist (for existing databases)
+-- Uncomment and run if updating an existing database:
+-- ALTER TABLE Orders ADD PaymentMethod NVARCHAR(50) DEFAULT 'Cash On Delivery';

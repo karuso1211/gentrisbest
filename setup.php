@@ -85,6 +85,21 @@ if (!$productsTableResult || sqlsrv_fetch_array($productsTableResult) === null) 
     $output[] = "✓ Products table already exists";
 }
 
+// Step 3.5: Add WholesalePrice column to Products if it doesn't exist
+$checkWholesaleSql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Products' AND COLUMN_NAME='WholesalePrice'";
+$wholesaleResult = sqlsrv_query($conn, $checkWholesaleSql);
+
+if (!$wholesaleResult || sqlsrv_fetch_array($wholesaleResult) === null) {
+    $addWholesaleSql = "ALTER TABLE Products ADD WholesalePrice DECIMAL(10, 2)";
+    if (sqlsrv_query($conn, $addWholesaleSql)) {
+        $output[] = "✓ Added WholesalePrice column to Products table";
+    } else {
+        $output[] = "✗ Failed to add WholesalePrice column: " . print_r(sqlsrv_errors(), true);
+    }
+} else {
+    $output[] = "✓ WholesalePrice column already exists";
+}
+
 // Step 4: Create Orders table if it doesn't exist
 $checkOrdersTableSql = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='Orders'";
 $ordersTableResult = sqlsrv_query($conn, $checkOrdersTableSql);
@@ -114,6 +129,21 @@ if (!$ordersTableResult || sqlsrv_fetch_array($ordersTableResult) === null) {
     }
 } else {
     $output[] = "✓ Orders table already exists";
+}
+
+// Step 4.5: Add PaymentMethod column to Orders if it doesn't exist
+$checkPaymentMethodSql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Orders' AND COLUMN_NAME='PaymentMethod'";
+$paymentMethodResult = sqlsrv_query($conn, $checkPaymentMethodSql);
+
+if (!$paymentMethodResult || sqlsrv_fetch_array($paymentMethodResult) === null) {
+    $addPaymentMethodSql = "ALTER TABLE Orders ADD PaymentMethod NVARCHAR(50) DEFAULT 'Cash On Delivery'";
+    if (sqlsrv_query($conn, $addPaymentMethodSql)) {
+        $output[] = "✓ Added PaymentMethod column to Orders table";
+    } else {
+        $output[] = "✗ Failed to add PaymentMethod column: " . print_r(sqlsrv_errors(), true);
+    }
+} else {
+    $output[] = "✓ PaymentMethod column already exists";
 }
 
 // Step 5: Create default admin account
