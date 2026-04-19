@@ -16,7 +16,8 @@ $username = $_POST['username'];
 $password = $_POST['password'];
 
 // Prepared statement to prevent SQL injection
-$sql = "SELECT AccountType FROM Users WHERE Username = ? AND Password = ?";
+// Use case-sensitive collation (COLLATE Latin1_General_100_BIN2) for password comparison
+$sql = "SELECT AccountType FROM Users WHERE Username = ? AND Password COLLATE Latin1_General_100_BIN2 = ? COLLATE Latin1_General_100_BIN2";
 $params = array($username, $password);
 $stmt = sqlsrv_query($conn, $sql, $params);
 

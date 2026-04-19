@@ -50,8 +50,8 @@ if ($action === 'get_available_products') {
 } elseif ($action === 'place_order') {
     // Place an order
     
-    // Check if user is admin, inventory, or manager - these roles cannot place orders
-    if (isset($_SESSION['accountType']) && in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+    // Check if user is admin, inventory, manager, or front desk - these roles cannot place orders
+    if (isset($_SESSION['accountType']) && in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'])) {
         echo json_encode(['success' => false, 'error' => 'Only regular users can place orders!']);
         exit();
     }
@@ -128,6 +128,107 @@ if ($action === 'get_available_products') {
         echo json_encode(['success' => false, 'error' => 'Failed to place order']);
     }
     
+} elseif ($action === 'pos_order') {
+    // POS Order for walk-in customers (front desk only)
+    // Check if user is FRONT DESK
+    if (!isset($_SESSION['accountType']) || $_SESSION['accountType'] !== 'FRONT DESK') {
+        echo json_encode(['success' => false, 'error' => 'Only FRONT DESK users can process POS orders']);
+        exit();
+    }
+    
+    $productId = isset($_POST['productId']) ? intval($_POST['productId']) : null;
+    $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : null;
+    $paymentMethod = isset($_POST['paymentMethod']) ? trim($_POST['paymentMethod']) : 'Cash';
+    $transactionId = isset($_POST['transactionId']) ? trim($_POST['transactionId']) : null;
+    
+    // Validate payment method for POS
+    $validPOSPaymentMethods = ['Cash', 'GCASH', 'Card'];
+    if (!in_array($paymentMethod, $validPOSPaymentMethods)) {
+        $paymentMethod = 'Cash';
+    }
+    
+    // Validate inputs
+    if (!$productId || !$quantity || $quantity <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Invalid product or quantity']);
+        exit();
+    }
+    
+    // Get product details
+    $productSql = "SELECT ProductName, Price, WholesalePrice, Quantity FROM Products WHERE ProductID = ?";
+    $productParams = array($productId);
+    $productStmt = sqlsrv_query($conn, $productSql, $productParams);
+    
+    if (!$productStmt || !($product = sqlsrv_fetch_array($productStmt, SQLSRV_FETCH_ASSOC))) {
+        echo json_encode(['success' => false, 'error' => 'Product not found']);
+        exit();
+    }
+    
+    // Check if quantity is available
+    if ($product['Quantity'] < $quantity) {
+        echo json_encode(['success' => false, 'error' => 'Insufficient stock. Available: ' . $product['Quantity']]);
+        exit();
+    }
+    
+    // Determine unit price
+    $unitPrice = floatval($product['Price']);
+    $priceType = 'REGULAR';
+    
+    if ($quantity >= 10 && !is_null($product['WholesalePrice']) && floatval($product['WholesalePrice']) > 0) {
+        $unitPrice = floatval($product['WholesalePrice']);
+        $priceType = 'WHOLESALE';
+    }
+    
+    // Use provided transaction ID or generate new one
+    if (!$transactionId) {
+        $transactionId = 'POS-' . date('Ymd') . '-' . uniqid();
+    }
+    
+    // Calculate total price
+    $totalPrice = $unitPrice * $quantity;
+    
+    // Insert POS transaction (using Orders table with special username)
+    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, PaymentMethod, Notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $insertParams = array($transactionId, 'WALKIN_CUSTOMER', $productId, $product['ProductName'], $quantity, $unitPrice, $totalPrice, $paymentMethod, 'POS Transaction by ' . $username);
+    
+    $insertResult = sqlsrv_query($conn, $insertSql, $insertParams);
+    
+    if ($insertResult) {
+        // Reduce product quantity
+        $updateSql = "UPDATE Products SET Quantity = Quantity - ? WHERE ProductID = ?";
+        $updateParams = array($quantity, $productId);
+        $updateResult = sqlsrv_query($conn, $updateSql, $updateParams);
+        
+        if (!$updateResult) {
+            // Fallback error message
+            $errors = sqlsrv_errors();
+            echo json_encode(['success' => false, 'error' => 'Failed to update inventory: ' . ($errors ? $errors[0]['message'] : 'Unknown error')]);
+            exit();
+        }
+        
+        echo json_encode([
+            'success' => true,
+            'message' => 'POS transaction completed',
+            'transactionId' => $transactionId,
+            'totalPrice' => number_format($totalPrice, 2),
+            'priceType' => $priceType,
+            'unitPrice' => number_format($unitPrice, 2),
+            'quantity' => $quantity
+        ]);
+    } else {
+        // Get detailed error information
+        $errors = sqlsrv_errors();
+        $errorMsg = 'Failed to process POS transaction';
+        if ($errors) {
+            $errorMsg = 'Database error: ' . $errors[0]['message'];
+            // Check if it's a foreign key constraint error
+            if (strpos($errors[0]['message'], 'WALKIN_CUSTOMER') !== false || strpos($errors[0]['message'], 'FOREIGN KEY') !== false) {
+                $errorMsg = 'POS system not initialized. Please run setup.php to create the WALKIN_CUSTOMER account.';
+            }
+        }
+        echo json_encode(['success' => false, 'error' => $errorMsg]);
+    }
+    
 } elseif ($action === 'get_order_history') {
     // Fetch user's orders
     $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, PaymentMethod
@@ -155,8 +256,8 @@ if ($action === 'get_available_products') {
     echo json_encode(['success' => true, 'orders' => $orders]);
     
 } elseif ($action === 'get_all_orders') {
-    // Check if user has permission (ADMIN, INVENTORY, MANAGER only)
-    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+    // Check if user has permission (ADMIN, INVENTORY, MANAGER, FRONT DESK)
+    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'])) {
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
         exit();
     }
@@ -212,7 +313,7 @@ if ($action === 'get_available_products') {
     
     // Check if user is the order owner or has admin rights
     $userAccountType = isset($_SESSION['accountType']) ? $_SESSION['accountType'] : 'USER';
-    if ($username !== $order['Username'] && !in_array($userAccountType, ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+    if ($username !== $order['Username'] && !in_array($userAccountType, ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'])) {
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
         exit();
     }
@@ -283,7 +384,7 @@ if ($action === 'get_available_products') {
         exit();
     }
     
-    // Check if user has permission (ADMIN, INVENTORY, MANAGER only)
+    // Check if user has permission (ADMIN, INVENTORY, MANAGER only - NOT FRONT DESK)
     if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
         exit();
@@ -324,8 +425,8 @@ if ($action === 'get_available_products') {
     }
 
 } elseif ($action === 'get_today_sales') {
-    // Fetch today's orders only (ADMIN, INVENTORY, MANAGER only)
-    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER'])) {
+    // Fetch today's orders only (ADMIN, INVENTORY, MANAGER, FRONT DESK)
+    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'])) {
         echo json_encode(['success' => false, 'error' => 'Unauthorized']);
         exit();
     }

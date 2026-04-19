@@ -103,28 +103,28 @@
             <div class="input-group mb-3 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-id-card"></i></span>
                 <input type="text" id="firstName" name="firstName" class="form-control border-start-0 ps-0"
-                    placeholder="First Name" required autocomplete="given-name">
+                    placeholder="First Name" required autocomplete="off">
             </div>
 
             <!-- Last Name -->
             <div class="input-group mb-3 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-id-card"></i></span>
                 <input type="text" id="lastName" name="lastName" class="form-control border-start-0 ps-0"
-                    placeholder="Last Name" required autocomplete="family-name">
+                    placeholder="Last Name" required autocomplete="off">
             </div>
 
             <!-- Username -->
             <div class="input-group mb-3 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-user"></i></span>
                 <input type="text" id="username" name="username" class="form-control border-start-0 ps-0"
-                    placeholder="Username" required autocomplete="username">
+                    placeholder="Username" required autocomplete="off">
             </div>
 
             <!-- Contact Number -->
             <div class="input-group mb-3 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-phone"></i></span>
                 <input type="tel" id="contactNumber" name="contactNumber" class="form-control border-start-0 ps-0"
-                    placeholder="Contact Number" required autocomplete="tel" pattern="[0-9]{11}"
+                    placeholder="Contact Number" required autocomplete="off" pattern="[0-9]{11}"
                     title="Please enter a valid 11-digit mobile number">
             </div>
 
@@ -132,7 +132,7 @@
             <div class="input-group mb-3 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-envelope"></i></span>
                 <input type="email" id="email" name="email" class="form-control border-start-0 ps-0" placeholder="Email"
-                    required autocomplete="email" pattern=".*@.*\.com$" title="Email must contain @ and end with .com">
+                    required autocomplete="off" pattern=".*@.*\.com$" title="Email must contain @ and end with .com">
             </div>
 
             <!-- Password -->
@@ -140,11 +140,7 @@
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-lock text-sky"></i></span>
                 <input type="password" id="password" name="password"
                     class="form-control border-start-0 border-end-0 ps-0 pe-0" placeholder="Password" required
-                    autocomplete="new-password">
-                <button class="btn btn-outline-secondary bg-white border-start-0 border text-muted" type="button"
-                    id="togglePasswordBtn">
-                    <i class="fa-solid fa-eye" id="togglePasswordIcon"></i>
-                </button>
+                    autocomplete="off">    
             </div>
 
             <!-- Confirm Password -->
@@ -152,7 +148,7 @@
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-lock"></i></span>
                 <input type="password" id="confirmPassword" name="confirmPassword"
                     class="form-control border-start-0 ps-0" placeholder="Confirm Password" required
-                    autocomplete="new-password">
+                    autocomplete="off">
             </div>
 
 
@@ -171,6 +167,40 @@
     </main>
 
     <script src="app.js"></script>
+    <script>
+        // Registration Form Validation
+        document.addEventListener('DOMContentLoaded', function() {
+            const registerForm = document.getElementById('registerForm');
+            if (registerForm) {
+                registerForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    
+                    const password = document.getElementById('password').value;
+                    const confirmPassword = document.getElementById('confirmPassword').value;
+                    const errorBox = document.getElementById('errorBox');
+                    const successBox = document.getElementById('successBox');
+                    
+                    // Hide previous alerts
+                    errorBox.classList.add('d-none');
+                    errorBox.classList.remove('d-flex');
+                    successBox.classList.add('d-none');
+                    successBox.classList.remove('d-flex');
+                    
+                    // Validate passwords match
+                    if (password !== confirmPassword) {
+                        const errorText = document.getElementById('errorText');
+                        errorText.textContent = 'Passwords do not match.';
+                        errorBox.classList.remove('d-none');
+                        errorBox.classList.add('d-flex');
+                        return false;
+                    }
+                    
+                    // If validation passes, submit the form
+                    registerForm.submit();
+                });
+            }
+        });
+    </script>
 </body>
 
 </html>

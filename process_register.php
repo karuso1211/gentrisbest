@@ -14,11 +14,18 @@ $username = $_POST['username'];
 $contact = $_POST['contactNumber'];
 $email = $_POST['email'];
 $password = $_POST['password'];
+$confirmPassword = $_POST['confirmPassword'];
 
-$sql = "INSERT INTO Users (FirstName, LastName, Username, ContactNumber, Email, Password)
-        VALUES (?, ?, ?, ?, ?, ?)";
-$params = array($firstname, $lastname, $username, $contact, $email, $password);
-$result = sqlsrv_query($conn, $sql, $params);
+// Validate that passwords match (case-sensitive comparison)
+if ($password !== $confirmPassword) {
+    $result = false;
+    $passwordError = "Passwords do not match";
+} else {
+    $sql = "INSERT INTO Users (FirstName, LastName, Username, ContactNumber, Email, Password)
+            VALUES (?, ?, ?, ?, ?, ?)";
+    $params = array($firstname, $lastname, $username, $contact, $email, $password);
+    $result = sqlsrv_query($conn, $sql, $params);
+}
 ?>
 
 <!DOCTYPE html>

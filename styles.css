@@ -254,3 +254,88 @@ body {
         }
     }
 }
+
+/* Order History Table Scrollbar Fix */
+#analyticsSection .table-responsive {
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+}
+
+#analyticsSection .table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+#analyticsSection .table-responsive::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#analyticsSection .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.5);
+    border-radius: 4px;
+}
+
+#analyticsSection .table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.8);
+}
+
+/* Additional scrollbar styling for Today's Sales and Order History tables */
+#todaysSalesCard {
+    max-height: 700px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+#todaysSalesCard .table-responsive {
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+#todaysSalesCard .table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+#todaysSalesCard .table-responsive::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+#todaysSalesCard .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.5);
+    border-radius: 4px;
+}
+
+#todaysSalesCard .table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.8);
+}
+
+/* Explicit styling for Order History card to ensure scrollbar always appears */
+.card:last-of-type .table-responsive {
+    max-height: 600px;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+}
+
+.card:last-of-type .table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.card:last-of-type .table-responsive::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.card:last-of-type .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(99, 102, 241, 0.5);
+    border-radius: 4px;
+}
+
+.card:last-of-type .table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 102, 241, 0.8);
+}

@@ -54,6 +54,7 @@ document.addEventListener('DOMContentLoaded', function() {
         loadBrowseProducts();
         
         // Setup inventory form listener
+
         const addProductForm = document.getElementById('addProductForm');
         if (addProductForm) {
             addProductForm.addEventListener('submit', function(e) {
@@ -273,6 +274,9 @@ function displayUserData(userData) {
             case 'MANAGER':
                 userRoleDisplay.classList.add('bg-info');
                 break;
+            case 'FRONT DESK':
+                userRoleDisplay.classList.add('bg-primary');
+                break;
             case 'GUEST':
                 userRoleDisplay.classList.add('bg-secondary');
                 break;
@@ -287,6 +291,7 @@ function displayUserData(userData) {
     const analyticsNavItem = document.getElementById('analyticsNavItem');
     const inventoryTab = document.getElementById('inventoryNavItem');
     const adminTab = document.getElementById('adminNavItem');
+    const posTab = document.getElementById('posNavItem');
     
     if (isGuest) {
         // Hide all restricted tabs for guests
@@ -294,6 +299,7 @@ function displayUserData(userData) {
         if (analyticsNavItem) analyticsNavItem.style.display = 'none';
         if (inventoryTab) inventoryTab.style.display = 'none';
         if (adminTab) adminTab.style.display = 'none';
+        if (posTab) posTab.style.display = 'none';
     } else {
         // Show tabs for authenticated users based on their role
         // Reports tab is visible only to ADMIN, INVENTORY, MANAGER
@@ -311,10 +317,17 @@ function displayUserData(userData) {
             if (adminTab) adminTab.style.display = 'block';
         }
 
-        // Show inventory tab if user has inventory access (ADMIN, INVENTORY, MANAGER)
-        const inventoryRoles = ['ADMIN', 'INVENTORY', 'MANAGER'];
+        // Show inventory tab if user has inventory access (ADMIN, INVENTORY, MANAGER, FRONT DESK)
+        const inventoryRoles = ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'];
         if (inventoryRoles.includes(userData.accountType)) {
             if (inventoryTab) inventoryTab.style.display = 'block';
+        }
+        
+        // Show POS tab if user is FRONT DESK
+        if (userData.accountType === 'FRONT DESK') {
+            if (posTab) posTab.style.display = 'block';
+        } else {
+            if (posTab) posTab.style.display = 'none';
         }
     }
     
@@ -419,12 +432,14 @@ function showModal(title, message, headerBg = 'bg-info', footerButtons = []) {
     // Close any existing modal instance first
     const existingModal = bootstrap.Modal.getInstance(modal);
     if (existingModal) {
+        existingModal.hide();
         existingModal.dispose();
     }
     
-    // Remove any extra backdrops
+    // Clean up all backdrops and modal-open class
     document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
     document.body.classList.remove('modal-open');
+    document.body.style.overflow = 'auto'; // Restore scrolling
     
     // Set header background color
     modalHeader.className = `modal-header ${headerBg} text-white`;
@@ -459,6 +474,13 @@ function showModal(title, message, headerBg = 'bg-info', footerButtons = []) {
         keyboard: false
     });
     bootstrapModal.show();
+    
+    // Add listener to clean up when modal is hidden
+    modal.addEventListener('hidden.bs.modal', function() {
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = 'auto';
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    }, { once: true });
 }
 
 // ============================================
@@ -505,6 +527,7 @@ function displayUsersTable(users) {
                     <option value="ADMIN" ${user.AccountType === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
                     <option value="INVENTORY" ${user.AccountType === 'INVENTORY' ? 'selected' : ''}>INVENTORY</option>
                     <option value="MANAGER" ${user.AccountType === 'MANAGER' ? 'selected' : ''}>MANAGER</option>
+                    <option value="FRONT DESK" ${user.AccountType === 'FRONT DESK' ? 'selected' : ''}>FRONT DESK</option>
                 </select>
             </td>
             <td>
@@ -807,6 +830,16 @@ function displayBrowseProducts(products) {
         const regularPrice = parseFloat(product.Price);
         const hasWholesale = product.WholesalePrice && parseFloat(product.WholesalePrice) > 0;
         
+        // Stock indicator
+        const stockIndicator = `
+            <div class="mt-2 p-2 rounded" style="background-color: ${product.Quantity > 5 ? '#d4edda' : '#fff3cd'}; border-left: 4px solid ${product.Quantity > 5 ? '#28a745' : '#ffc107'};">
+                <small class="fw-bold" style="color: ${product.Quantity > 5 ? '#155724' : '#856404'};">
+                    <i class="fa-solid ${product.Quantity > 5 ? 'fa-check-circle' : 'fa-exclamation-circle'} me-1"></i>
+                    ${product.Quantity} unit${product.Quantity !== 1 ? 's' : ''} in stock
+                </small>
+            </div>
+        `;
+        
         if (hasWholesale) {
             const wholesalePrice = parseFloat(product.WholesalePrice);
             priceDisplay = `
@@ -819,7 +852,8 @@ function displayBrowseProducts(products) {
                         <i class="fa-solid fa-tag me-1"></i>Wholesale Available
                     </span>
                 </div>
-                <p class="text-muted small mb-0"><i class="fa-solid fa-info-circle me-1"></i>Buy 10+ units to unlock wholesale pricing</p>
+                <p class="text-muted small mb-2"><i class="fa-solid fa-info-circle me-1"></i>Buy 10+ units to unlock wholesale pricing</p>
+                ${stockIndicator}
             `;
         } else {
             priceDisplay = `
@@ -827,10 +861,8 @@ function displayBrowseProducts(products) {
                     <span class="h5 mb-0 text-sky fw-bold">
                         ₱${regularPrice.toFixed(2)}
                     </span>
-                    <span class="${stockClass} fw-bold">
-                        ${product.Quantity} in stock
-                    </span>
                 </div>
+                ${stockIndicator}
             `;
         }
         
@@ -1084,9 +1116,629 @@ function setupBrowseSearchListener() {
     }
 }
 
+// ============================================
+// POS FUNCTIONS - POINT OF SALE FOR WALK-IN CUSTOMERS
+// ============================================
+let allPOSProducts = [];
+let posProductsFiltered = [];
+let posCart = []; // Shopping cart for POS items
+
+function loadPOSProducts() {
+    // Load products for POS
+    fetch('customer_api.php?action=get_available_products')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                allPOSProducts = data.products;
+                posProductsFiltered = data.products;
+                displayPOSProducts(data.products);
+                setupPOSSearchListener();
+                displayPOSCart(); // Initialize cart display
+            } else {
+                showModal('Error', `Failed to load products: ${data.error}`, 'bg-danger', [
+                    {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
+                ]);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showModal('Error', 'Failed to load products', 'bg-danger', [
+                {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
+            ]);
+        });
+}
+
+function displayPOSProducts(products) {
+    const container = document.getElementById('posProductsContainer');
+    const productCount = document.getElementById('posProductCount');
+    
+    if (!container) return;
+    
+    container.innerHTML = '';
+    
+    // Count only products that are in stock (Quantity > 0)
+    const availableProducts = products.filter(p => p.Quantity > 0);
+    productCount.textContent = `${availableProducts.length} available`;
+    
+    if (products.length === 0) {
+        container.innerHTML = '<div class="col-12 text-center text-muted py-5"><i class="fa-solid fa-inbox me-2"></i>No products available</div>';
+        return;
+    }
+    
+    products.forEach(product => {
+        const isOutOfStock = product.Quantity <= 0;
+        const regularPrice = parseFloat(product.Price);
+        const hasWholesale = product.WholesalePrice && parseFloat(product.WholesalePrice) > 0;
+        
+        // Stock indicator
+        const stockIndicator = `
+            <div class="mt-2 p-2 rounded" style="background-color: ${product.Quantity > 5 ? '#d4edda' : '#fff3cd'}; border-left: 4px solid ${product.Quantity > 5 ? '#28a745' : '#ffc107'};">
+                <small class="fw-bold" style="color: ${product.Quantity > 5 ? '#155724' : '#856404'};">
+                    <i class="fa-solid ${product.Quantity > 5 ? 'fa-check-circle' : 'fa-exclamation-circle'} me-1"></i>
+                    ${product.Quantity} unit${product.Quantity !== 1 ? 's' : ''} in stock
+                </small>
+            </div>
+        `;
+        
+        let priceDisplay = '';
+        if (hasWholesale) {
+            const wholesalePrice = parseFloat(product.WholesalePrice);
+            priceDisplay = `
+                <div class="d-flex justify-content-between align-items-center mb-2 pt-2 border-top">
+                    <div>
+                        <div class="small text-muted mb-1">Regular: <del>₱${regularPrice.toFixed(2)}</del></div>
+                        <span class="h5 mb-0 text-success fw-bold">₱${wholesalePrice.toFixed(2)}</span>
+                    </div>
+                    <span class="badge bg-success">
+                        <i class="fa-solid fa-tag me-1"></i>Wholesale
+                    </span>
+                </div>
+                ${stockIndicator}
+            `;
+        } else {
+            priceDisplay = `
+                <div class="d-flex justify-content-between align-items-center mb-2 pt-2 border-top">
+                    <span class="h5 mb-0 text-sky fw-bold">₱${regularPrice.toFixed(2)}</span>
+                </div>
+                ${stockIndicator}
+            `;
+        }
+        
+        const productCard = document.createElement('div');
+        productCard.className = 'col-md-4 mb-4';
+        productCard.innerHTML = `
+            <div class="card border-0 shadow-sm h-100 ${isOutOfStock ? 'opacity-75' : ''}">
+                <div class="card-body product-card-body d-flex flex-column h-100">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title fw-bold">${product.ProductName}</h6>
+                        <span class="badge ${product.Quantity > 0 ? 'bg-success' : 'bg-danger'}">
+                            ${product.Status}
+                        </span>
+                    </div>
+                    <p class="text-muted small mb-2">${product.Description || 'No description'}</p>
+                    <p class="text-muted small">
+                        <strong>Category:</strong> ${product.Category || 'N/A'}
+                    </p>
+
+                    <div class="mt-auto">
+                        ${priceDisplay}
+                        <div class="product-button-wrapper mt-2">
+                            ${isOutOfStock ? 
+                                '<button class="btn btn-secondary w-100" disabled><i class="fa-solid fa-times me-2"></i>Out of Stock</button>' :
+                                `<button class="btn btn-sky w-100 btn-order-fixed" onclick="quickAddToCart(${product.ProductID}, '${product.ProductName}', ${product.Price}, ${product.WholesalePrice || 'null'})">
+                                    <i class="fa-solid fa-shopping-cart me-2"></i>Add to Cart
+                                </button>`
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(productCard);
+    });
+}
+
+function setupPOSSearchListener() {
+    const searchInput = document.getElementById('searchPOSProducts');
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase().trim();
+            
+            if (searchTerm === '') {
+                posProductsFiltered = allPOSProducts;
+            } else {
+                posProductsFiltered = allPOSProducts.filter(product => {
+                    const name = (product.ProductName || '').toLowerCase();
+                    const category = (product.Category || '').toLowerCase();
+                    return name.includes(searchTerm) || category.includes(searchTerm);
+                });
+            }
+            
+            displayPOSProducts(posProductsFiltered);
+        });
+    }
+}
+
+function quickAddToCart(productId, productName, regularPrice, wholesalePrice) {
+    // Quick add with quantity 1 and default payment method (Cash)
+    const quantity = 1;
+    const paymentMethod = 'Cash';
+    
+    // Determine unit price based on quantity
+    let unitPrice = parseFloat(regularPrice);
+    let priceType = 'REGULAR';
+    
+    if (quantity >= 10 && wholesalePrice && parseFloat(wholesalePrice) > 0) {
+        unitPrice = parseFloat(wholesalePrice);
+        priceType = 'WHOLESALE';
+    }
+    
+    // Calculate total for this item
+    const itemTotal = unitPrice * quantity;
+    
+    // Create cart item
+    const cartItem = {
+        id: Date.now(), // Unique ID for cart item (not product ID, allows duplicate products)
+        productId: productId,
+        productName: productName,
+        quantity: quantity,
+        regularPrice: parseFloat(regularPrice),
+        wholesalePrice: wholesalePrice ? parseFloat(wholesalePrice) : null,
+        unitPrice: unitPrice,
+        priceType: priceType,
+        itemTotal: itemTotal,
+        paymentMethod: paymentMethod
+    };
+    
+    // Add to cart
+    posCart.push(cartItem);
+    
+    // Update cart display immediately (real-time)
+    displayPOSCart();
+}
+
+function showPOSOrderModal(productId, productName, price, wholesalePrice) {
+    const modal = document.getElementById('adminModal');
+    const modalHeader = document.getElementById('modalHeader');
+    const modalTitle = document.getElementById('adminModalLabel');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+    
+    const regularPrice = parseFloat(price);
+    const wholesale = wholesalePrice && parseFloat(wholesalePrice) > 0 ? parseFloat(wholesalePrice) : null;
+    
+    // Set header
+    modalHeader.className = 'modal-header bg-sky text-white';
+    modalTitle.textContent = 'Add to Cart - POS';
+    
+    // Create form content
+    modalBody.innerHTML = `
+        <form id="posOrderForm">
+            <div class="mb-3">
+                <h6 class="fw-bold">${productName}</h6>
+                <div id="posPriceInfo" class="mb-3"></div>
+            </div>
+            <div class="mb-3">
+                <label for="posOrderQuantity" class="form-label fw-medium">Quantity</label>
+                <input type="number" class="form-control" id="posOrderQuantity" min="1" value="1" required>
+            </div>
+            <div id="posTotalPriceDisplay" class="alert alert-info mb-0">
+                <strong>Item Total:</strong> ₱<span id="posTotalAmount">0.00</span>
+            </div>
+        </form>
+    `;
+    
+    // Set footer buttons
+    modalFooter.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sky" id="confirmPOSOrderBtn">Add to Cart</button>
+    `;
+    
+    // Show modal
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+    
+    // Function to update price display
+    function updatePOSPriceDisplay() {
+        const quantityInput = document.getElementById('posOrderQuantity');
+        const priceInfoDiv = document.getElementById('posPriceInfo');
+        const totalAmountSpan = document.getElementById('posTotalAmount');
+        
+        const qty = parseInt(quantityInput.value) || 0;
+        let applicablePrice = regularPrice;
+        let priceInfoHtml = `<p class="text-muted mb-0">Price: <strong>₱${regularPrice.toFixed(2)}</strong>/unit</p>`;
+        
+        if (qty >= 10 && wholesale) {
+            applicablePrice = wholesale;
+            const savings = (regularPrice - wholesale) * qty;
+            priceInfoHtml = `
+                <div class="mb-2">
+                    <p class="text-muted mb-1"><del>Regular: ₱${regularPrice.toFixed(2)}/unit</del></p>
+                    <p class="text-success mb-1"><strong>Wholesale: ₱${wholesale.toFixed(2)}/unit</strong></p>
+                    <span class="badge bg-success"><i class="fa-solid fa-percentage me-1"></i>Save ₱${savings.toFixed(2)}!</span>
+                </div>
+            `;
+        }
+        
+        priceInfoDiv.innerHTML = priceInfoHtml;
+        const total = qty * applicablePrice;
+        totalAmountSpan.textContent = total.toFixed(2);
+    }
+    
+    // Update price on quantity change
+    const quantityInput = document.getElementById('posOrderQuantity');
+    if (quantityInput) {
+        quantityInput.addEventListener('input', updatePOSPriceDisplay);
+        updatePOSPriceDisplay();
+    }
+    
+    // Handle add to cart
+    document.getElementById('confirmPOSOrderBtn').onclick = function() {
+        const quantity = parseInt(document.getElementById('posOrderQuantity').value) || 0;
+        
+        if (!quantity || quantity <= 0) {
+            showModal('Error', 'Please enter a valid quantity', 'bg-warning', [
+                {text: 'Ok', class: 'btn btn-warning', dataDismiss: true}
+            ]);
+            return;
+        }
+        
+        // Close modal and add to cart immediately without success message
+        bootstrapModal.hide();
+        
+        // Determine unit price
+        let unitPrice = regularPrice;
+        let priceType = 'REGULAR';
+        
+        if (quantity >= 10 && wholesale) {
+            unitPrice = wholesale;
+            priceType = 'WHOLESALE';
+        }
+        
+        const itemTotal = unitPrice * quantity;
+        
+        const cartItem = {
+            id: Date.now(),
+            productId: productId,
+            productName: productName,
+            quantity: quantity,
+            regularPrice: regularPrice,
+            wholesalePrice: wholesale,
+            unitPrice: unitPrice,
+            priceType: priceType,
+            itemTotal: itemTotal,
+            paymentMethod: 'Cash' // Default payment method
+        };
+        
+        posCart.push(cartItem);
+        
+        // Update cart display immediately
+        displayPOSCart();
+    };
+}
+
+function addToCart(productId, productName, regularPrice, wholesalePrice, quantity, paymentMethod) {
+    // This function is now kept for compatibility but quickAddToCart is used instead
+}
+
+function displayPOSCart() {
+    const cartContainer = document.getElementById('posCartContainer');
+    if (!cartContainer) return;
+    
+    // Clear existing cart display
+    cartContainer.innerHTML = '';
+    
+    if (posCart.length === 0) {
+        cartContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="fa-solid fa-shopping-cart me-2"></i>Cart is empty</div>';
+        return;
+    }
+    
+    // Calculate cart totals
+    let cartTotal = 0;
+    let cartQuantity = 0;
+    let commonPaymentMethod = posCart[0].paymentMethod; // Get first item's payment method
+    const allSamePayment = posCart.every(item => item.paymentMethod === commonPaymentMethod);
+    
+    posCart.forEach(item => {
+        cartTotal += item.itemTotal;
+        cartQuantity += item.quantity;
+    });
+    
+    // Create cart HTML
+    let cartHTML = `
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-sky text-white">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0"><i class="fa-solid fa-shopping-cart me-2"></i>Shopping Cart</h6>
+                    <span class="badge bg-light text-dark">${posCart.length} item(s)</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-3">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Product</th>
+                                <th class="text-center" style="width: 70px;">Qty</th>
+                                <th class="text-end" style="width: 80px;">Unit Price</th>
+                                <th class="text-end" style="width: 80px;">Total</th>
+                                <th class="text-end" style="width: 80px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+    `;
+    
+    posCart.forEach((item, index) => {
+        const priceTypeLabel = item.priceType === 'WHOLESALE' ? '<span class="badge bg-success ms-1">Wholesale</span>' : '';
+        cartHTML += `
+            <tr>
+                <td>
+                    <strong>${item.productName}</strong>
+                    ${priceTypeLabel}
+                </td>
+                <td class="text-center">
+                    <input type="number" class="form-control form-control-sm" value="${item.quantity}" min="1" 
+                           onchange="updateCartItemQuantity(${index}, this.value)" style="width: 60px;">
+                </td>
+                <td class="text-end">₱${item.unitPrice.toFixed(2)}</td>
+                <td class="text-end"><strong>₱${item.itemTotal.toFixed(2)}</strong></td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-danger" onclick="removePOSCartItem(${index})" title="Remove">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+    
+    cartHTML += `
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="bg-light p-3 rounded mb-3">
+                    <label for="posPaymentMethod" class="form-label fw-bold mb-2">
+                        <i class="fa-solid fa-credit-card me-2"></i>Payment Method (for all items)
+                    </label>
+                    <select class="form-select" id="posPaymentMethod" onchange="updateAllCartPaymentMethod(this.value)">
+                        <option value="Cash" ${allSamePayment && commonPaymentMethod === 'Cash' ? 'selected' : ''}>
+                            <i class="fa-solid fa-money-bill me-1"></i>Cash
+                        </option>
+                        <option value="GCASH" ${allSamePayment && commonPaymentMethod === 'GCASH' ? 'selected' : ''}>
+                            <i class="fa-solid fa-mobile me-1"></i>GCash
+                        </option>
+                        <option value="Card" ${allSamePayment && commonPaymentMethod === 'Card' ? 'selected' : ''}>
+                            <i class="fa-solid fa-credit-card me-1"></i>Card
+                        </option>
+                    </select>
+                    <small class="text-muted d-block mt-2">This payment method will be applied to all items in the cart</small>
+                </div>
+                
+                <div class="border-top pt-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p class="text-muted mb-1"><i class="fa-solid fa-box me-1"></i>Total Items: <strong>${cartQuantity}</strong></p>
+                            <p class="text-muted mb-0"><i class="fa-solid fa-list me-1"></i>Cart Items: <strong>${posCart.length}</strong></p>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <h5 class="mb-3">
+                                <i class="fa-solid fa-money-bill-wave me-2"></i>
+                                Grand Total: <span class="text-success fw-bold">₱${cartTotal.toFixed(2)}</span>
+                            </h5>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-grid gap-2 mt-3">
+                    <button type="button" class="btn btn-danger" onclick="clearPOSCart()">
+                        <i class="fa-solid fa-trash-alt me-2"></i>Clear Cart
+                    </button>
+                    <button type="button" class="btn btn-lg btn-success" onclick="completePOSOrders()">
+                        <i class="fa-solid fa-check me-2"></i>Complete All Orders
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    cartContainer.innerHTML = cartHTML;
+}
+
+function updateCartItemQuantity(index, newQuantity) {
+    newQuantity = parseInt(newQuantity) || 1;
+    
+    if (newQuantity <= 0) {
+        removePOSCartItem(index);
+        return;
+    }
+    
+    const item = posCart[index];
+    item.quantity = newQuantity;
+    
+    // Recalculate unit price based on new quantity (wholesale qualification)
+    let unitPrice = item.regularPrice;
+    let priceType = 'REGULAR';
+    
+    if (newQuantity >= 10 && item.wholesalePrice) {
+        unitPrice = item.wholesalePrice;
+        priceType = 'WHOLESALE';
+    }
+    
+    item.unitPrice = unitPrice;
+    item.priceType = priceType;
+    item.itemTotal = unitPrice * newQuantity;
+    
+    // Update cart display immediately
+    displayPOSCart();
+}
+
+function updateAllCartPaymentMethod(paymentMethod) {
+    // Update payment method for ALL items in cart at once
+    posCart.forEach(item => {
+        item.paymentMethod = paymentMethod;
+    });
+    
+    // Cart display updates to reflect the change (though the payment selector will stay in place)
+    displayPOSCart();
+}
+
+function updateCartItemPayment(index, paymentMethod) {
+    posCart[index].paymentMethod = paymentMethod;
+    // This function is kept for compatibility but updateAllCartPaymentMethod is now used
+}
+
+function removePOSCartItem(index) {
+    posCart.splice(index, 1);
+    displayPOSCart();
+}
+
+function clearPOSCart() {
+    showModal(
+        'Clear Cart',
+        '<p class="mb-0">Are you sure you want to clear all items from the cart?</p>',
+        'bg-warning',
+        [
+            {text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true},
+            {text: 'Clear', class: 'btn btn-danger', onclick: () => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (modal) modal.hide();
+                posCart = [];
+                displayPOSCart();
+            }}
+        ]
+    );
+}
+
+// Editing is now done inline in cart display - editPOSCartItem is deprecated
+
+function completePOSOrders() {
+    if (posCart.length === 0) {
+        showModal('Empty Cart', '<p class="mb-0">Please add items to the cart before completing the order.</p>', 'bg-warning', [
+            {text: 'Ok', class: 'btn btn-warning', dataDismiss: true}
+        ]);
+        return;
+    }
+    
+    // Show confirmation modal
+    let summary = '<div class="table-responsive"><table class="table table-sm"><tbody>';
+    let total = 0;
+    
+    posCart.forEach(item => {
+        summary += `<tr><td>${item.productName}</td><td class="text-end">${item.quantity}x ₱${item.unitPrice.toFixed(2)}</td><td class="text-end fw-bold">₱${item.itemTotal.toFixed(2)}</td></tr>`;
+        total += item.itemTotal;
+    });
+    
+    summary += `<tr class="table-active"><td colspan="2"><strong>Grand Total:</strong></td><td class="text-end"><strong class="text-success">₱${total.toFixed(2)}</strong></td></tr></tbody></table></div>`;
+    
+    showModal(
+        'Confirm Complete Order',
+        `<p class="mb-3"><strong>You are about to process ${posCart.length} item(s):</strong></p>${summary}
+        <p class="mb-0 text-muted small"><i class="fa-solid fa-info-circle me-1"></i>This will create separate transactions for each item.</p>`,
+        'bg-success',
+        [
+            {text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true},
+            {text: 'Complete Order', class: 'btn btn-success', onclick: () => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (modal) modal.hide();
+                processAllPOSOrders();
+            }}
+        ]
+    );
+}
+
+function processAllPOSOrders() {
+    // Process all items in cart as ONE transaction with single receipt
+    let processed = 0;
+    let failed = 0;
+    let failedItems = []; // Track which items failed and why
+    const totalItems = posCart.length;
+    const cartItems = [...posCart]; // Copy cart
+    
+    posCart = []; // Clear cart
+    displayPOSCart();
+    
+    // Generate ONE transaction ID for all items
+    const transactionId = 'POS-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substr(2, 9);
+    
+    console.log(`[POS] Starting batch process: ${totalItems} items, TransactionID: ${transactionId}`);
+    
+    const processNextItem = (index) => {
+        if (index >= cartItems.length) {
+            // All items processed
+            let message = `<p class="mb-2"><i class="fa-solid fa-check-circle text-success me-2"></i><strong>Orders processed!</strong></p>
+                           <p class="mb-2">Successfully processed: <strong class="text-success">${processed}</strong> item${processed !== 1 ? 's' : ''}</p>`;
+            
+            if (failed > 0) {
+                message += `<p class="mb-2">Failed: <strong class="text-danger">${failed}</strong></p>`;
+                if (failedItems.length > 0) {
+                    message += `<div class="alert alert-danger mt-2 p-2" style="font-size: 0.85rem;">
+                        <strong>Failed Items:</strong>
+                        <ul class="mb-0 ps-3">`;
+                    failedItems.forEach(fi => {
+                        message += `<li><strong>${fi.name}</strong>: ${fi.error}</li>`;
+                    });
+                    message += `</ul></div>`;
+                }
+            }
+            
+            showModal(
+                'Order Completion Summary',
+                message,
+                failed > 0 ? 'bg-warning' : 'bg-success',
+                [{text: 'Continue', class: failed > 0 ? 'btn btn-warning' : 'btn btn-success', dataDismiss: true, onclick: () => {
+                    setTimeout(() => loadPOSProducts(), 300);
+                }}]
+            );
+            return;
+        }
+        
+        const item = cartItems[index];
+        console.log(`[POS] Processing item ${index + 1}/${totalItems}: ${item.productName} (qty: ${item.quantity}, payment: ${item.paymentMethod})`);
+        
+        const formData = new FormData();
+        formData.append('action', 'pos_order');
+        formData.append('productId', item.productId);
+        formData.append('quantity', item.quantity);
+        formData.append('paymentMethod', item.paymentMethod);
+        formData.append('transactionId', transactionId); // Pass the same transaction ID for all items
+        
+        fetch('customer_api.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            console.log(`[POS] Response status for item ${index + 1}: ${response.status}`);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                processed++;
+                console.log(`[POS] Item ${index + 1} SUCCESS: ${item.productName}`);
+            } else {
+                failed++;
+                const errorMsg = data.error || 'Unknown error';
+                failedItems.push({name: item.productName, error: errorMsg});
+                console.error(`[POS] Item ${index + 1} FAILED: ${item.productName} - ${errorMsg}`);
+            }
+            // Process next item
+            processNextItem(index + 1);
+        })
+        .catch(error => {
+            failed++;
+            failedItems.push({name: item.productName, error: 'Network or parsing error: ' + error.message});
+            console.error(`[POS] Item ${index + 1} ERROR: ${error.message}`);
+            processNextItem(index + 1);
+        });
+    };
+    
+    // Start processing
+    processNextItem(0);
+}
+
 function loadOrderHistory() {
     // Check if user is admin, manager, or inventory staff - if so, load all orders
-    const isAdmin = window.currentUser && ['ADMIN', 'MANAGER', 'INVENTORY'].includes(window.currentUser.accountType);
+    const isAdmin = window.currentUser && ['ADMIN', 'MANAGER', 'INVENTORY', 'FRONT DESK'].includes(window.currentUser.accountType);
     const apiAction = isAdmin ? 'get_all_orders' : 'get_order_history';
     
     console.log('Loading order history - isAdmin:', isAdmin, 'action:', apiAction);
@@ -1193,7 +1845,9 @@ function displayOrderHistory(orders, isAdmin = false) {
         return;
     }
     
-    renderOrderRows(orders, isAdmin);
+    // Group POS orders before rendering
+    const groupedOrders = groupPOSOrders(orders);
+    renderOrderRows(groupedOrders, isAdmin);
 }
 
 function displayTodaysSales(orders) {
@@ -1210,62 +1864,106 @@ function displayTodaysSales(orders) {
     window.todaysSalesData = orders;
     
     tableBody.innerHTML = '';
-    orderCount.textContent = `${orders.length} order${orders.length !== 1 ? 's' : ''}`;
     
-    if (orders.length === 0) {
+    // Group POS orders before rendering
+    const groupedOrders = groupPOSOrders(orders);
+    
+    orderCount.textContent = `${groupedOrders.length} order${groupedOrders.length !== 1 ? 's' : ''}`;
+    
+    if (groupedOrders.length === 0) {
         tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-calendar me-2"></i>No order made today yet.</td></tr>`;
         return;
     }
     
     // Render today's sales rows
-    orders.forEach(order => {
-        const row = document.createElement('tr');
-        const orderDate = new Date(order.OrderDate);
-        const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-        const formattedTime = orderDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-        
-        const statusBadge = `<span class="badge ${
-            order.Status === 'PENDING' ? 'bg-warning' : 
-            order.Status === 'CONFIRMED' ? 'bg-info' : 
-            order.Status === 'SHIPPED' ? 'bg-primary' : 
-            'bg-success'
-        }">${order.Status}</span>`;
-        
-        let actionBtn;
-        if (order.Status === 'PENDING') {
-            actionBtn = `<div class="d-flex gap-2 justify-content-end">
-                <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
-                    <i class="fa-solid fa-times me-1"></i>Cancel</button>
-                <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
-                    <i class="fa-solid fa-truck me-1"></i>Ship</button>
-                <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
-                    <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
+    groupedOrders.forEach(groupedOrder => {
+        // Handle POS orders separately
+        if (groupedOrder.isPOS) {
+            const row = document.createElement('tr');
+            const orderDate = new Date(groupedOrder.OrderDate);
+            const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            
+            const statusBadge = `<span class="badge bg-success">POS</span>`;
+            
+            // Calculate totals
+            let totalQuantity = groupedOrder.items.reduce((sum, item) => sum + item.Quantity, 0);
+            let totalPrice = groupedOrder.items.reduce((sum, item) => sum + parseFloat(item.TotalPrice), 0);
+            const productList = groupedOrder.items.map(item => item.ProductName).join(', ');
+            
+            let actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
+                <button class="btn btn-sm btn-info" onclick="showPOSReceiptModal('${btoa(JSON.stringify(groupedOrder))}')">
+                    <i class="fa-solid fa-eye me-1"></i>Receipt</button>
             </div>`;
+            
+            row.innerHTML = `
+                <td><strong>${groupedOrder.OrderNumber}</strong></td>
+                <td>Walk-In Customer</td>
+                <td><small>${productList}</small></td>
+                <td>${totalQuantity}</td>
+                <td>
+                    <div class="small">
+                        <strong>₱${(totalPrice / totalQuantity).toFixed(2)}</strong>/unit avg
+                    </div>
+                    <div class="text-muted small">
+                        Total: <strong>₱${totalPrice.toFixed(2)}</strong>
+                    </div>
+                </td>
+                <td>${formattedDate}</td>
+                <td>${statusBadge}</td>
+                <td>${actionBtn}</td>
+            `;
+            
+            tableBody.appendChild(row);
         } else {
-            actionBtn = '<div class="d-flex justify-content-center"><span class="text-muted small">N/A</span></div>';
+            // Handle regular orders
+            const order = groupedOrder.items[0];
+            const row = document.createElement('tr');
+            const orderDate = new Date(order.OrderDate);
+            const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            
+            const statusBadge = `<span class="badge ${
+                order.Status === 'PENDING' ? 'bg-warning' : 
+                order.Status === 'CONFIRMED' ? 'bg-info' : 
+                order.Status === 'SHIPPED' ? 'bg-primary' : 
+                'bg-success'
+            }">${order.Status}</span>`;
+            
+            let actionBtn;
+            if (order.Status === 'PENDING') {
+                actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
+                    <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
+                        <i class="fa-solid fa-times me-1"></i>Cancel</button>
+                    <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
+                        <i class="fa-solid fa-truck me-1"></i>Ship</button>
+                    <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
+                        <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
+                </div>`;
+            } else {
+                actionBtn = '<div class="d-flex justify-content-center w-100"><span class="text-muted small">N/A</span></div>';
+            }
+            
+            const customerName = order.UserFullName || order.Username || 'Unknown';
+            
+            row.innerHTML = `
+                <td><strong>${order.OrderNumber}</strong></td>
+                <td>${customerName}</td>
+                <td>${order.ProductName}</td>
+                <td>${order.Quantity}</td>
+                <td>
+                    <div class="small">
+                        <strong>₱${parseFloat(order.UnitPrice).toFixed(2)}</strong>/unit
+                    </div>
+                    <div class="text-muted small">
+                        Total: <strong>₱${parseFloat(order.TotalPrice).toFixed(2)}</strong>
+                    </div>
+                </td>
+                <td>${formattedDate}</td>
+                <td>${statusBadge}</td>
+                <td>${actionBtn}</td>
+            `;
+            
+            tableBody.appendChild(row);
         }
-        
-        const customerName = order.UserFullName || order.Username || 'Unknown';
-        
-        row.innerHTML = `
-            <td><strong>${order.OrderNumber}</strong></td>
-            <td>${customerName}</td>
-            <td>${order.ProductName}</td>
-            <td>${order.Quantity}</td>
-            <td>
-                <div class="small">
-                    <strong>₱${parseFloat(order.UnitPrice).toFixed(2)}</strong>/unit
-                </div>
-                <div class="text-muted small">
-                    Total: <strong>₱${parseFloat(order.TotalPrice).toFixed(2)}</strong>
-                </div>
-            </td>
-            <td>${formattedDate} ${formattedTime}</td>
-            <td>${statusBadge}</td>
-            <td>${actionBtn}</td>
-        `;
-        
-        tableBody.appendChild(row);
     });
 }
 
@@ -1303,98 +2001,192 @@ function filterOrderHistory() {
         return;
     }
     
-    renderOrderRows(filteredOrders, window.isAdminView);
+    // Group POS orders before rendering
+    const groupedOrders = groupPOSOrders(filteredOrders);
+    renderOrderRows(groupedOrders, window.isAdminView);
 }
 
-function renderOrderRows(orders, isAdmin) {
-    const tableBody = document.getElementById('orderHistoryTableBody');
+function groupPOSOrders(orders) {
+    const grouped = [];
+    const posOrderMap = {}; // Map to track POS orders by OrderNumber
     
     orders.forEach(order => {
-        const row = document.createElement('tr');
-        const orderDate = new Date(order.OrderDate);
-        const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        const isPOS = order.Username === 'WALKIN_CUSTOMER';
         
-        console.log('Order:', order.OrderNumber, 'Status:', order.Status, 'isAdmin:', isAdmin);
-        
-        const statusBadge = `<span class="badge ${
-            order.Status === 'PENDING' ? 'bg-warning' : 
-            order.Status === 'CONFIRMED' ? 'bg-info' : 
-            order.Status === 'SHIPPED' ? 'bg-primary' : 
-            'bg-success'
-        }">${order.Status}</span>`;
-        
-        // Show appropriate action button based on order status and user role
-        let actionBtn;
-        if (isAdmin) {
-            // Manager/Admin view - show management buttons
-            if (order.Status === 'PENDING') {
-                actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap">
-                    <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
-                        <i class="fa-solid fa-eye me-1"></i>View</button>
-                    <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
-                        <i class="fa-solid fa-times me-1"></i>Cancel</button>
-                    <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
-                        <i class="fa-solid fa-truck me-1"></i>Ship</button>
-                    <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
-                        <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
-                </div>`;
+        if (isPOS) {
+            // Group POS orders by OrderNumber
+            if (!posOrderMap[order.OrderNumber]) {
+                // Create a grouped POS order
+                posOrderMap[order.OrderNumber] = {
+                    ...order,
+                    isPOS: true,
+                    items: [order]
+                };
+                grouped.push(posOrderMap[order.OrderNumber]);
             } else {
-                actionBtn = `<div class="d-flex gap-2 justify-content-center">
-                    <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
-                        <i class="fa-solid fa-eye me-1"></i>View</button>
-                </div>`;
+                // Add item to existing POS order group
+                posOrderMap[order.OrderNumber].items.push(order);
             }
         } else {
-            // Regular user view - show cancel/delivery and view buttons
-            if (order.Status === 'PENDING') {
-                actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap">
-                    <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
-                        <i class="fa-solid fa-eye me-1"></i>Receipt</button>
-                    <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
-                        <i class="fa-solid fa-times me-1"></i>Cancel</button></div>`;
-            } else if (order.Status === 'SHIPPED') {
-                actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap">
-                    <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
-                        <i class="fa-solid fa-eye me-1"></i>Receipt</button>
-                    <button class="btn btn-sm btn-success" onclick="showDeliveryConfirmModal(${order.OrderID}, '${order.OrderNumber}')">
-                        <i class="fa-solid fa-box-open me-1"></i>Confirm</button></div>`;
-            } else {
-                actionBtn = `<div class="d-flex justify-content-center">
-                    <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
-                        <i class="fa-solid fa-eye me-1"></i>Receipt</button>
-                </div>`;
-            }
+            // Regular orders are not grouped
+            grouped.push({
+                ...order,
+                isPOS: false,
+                items: [order]
+            });
         }
-        
-        // Build the row content
-        let rowContent = `
-            <td><strong>${order.OrderNumber}</strong></td>`;
-        
-        // Add customer name cell if showing all orders
-        if (isAdmin) {
-            const customerName = order.UserFullName || order.Username || 'Unknown';
-            rowContent += `<td>${customerName}</td>`;
-        }
-        
-        rowContent += `
-            <td>${order.ProductName}</td>
-            <td>${order.Quantity}</td>
-            <td>
-                <div class="small">
-                    <strong>₱${parseFloat(order.UnitPrice).toFixed(2)}</strong>/unit
-                </div>
-                <div class="text-muted small">
-                    Total: <strong>₱${parseFloat(order.TotalPrice).toFixed(2)}</strong>
-                </div>
-            </td>
-            <td>${formattedDate}</td>
-            <td>${statusBadge}</td>
-            <td>${actionBtn}</td>
-        `;
-        
-        row.innerHTML = rowContent;
-        tableBody.appendChild(row);
     });
+    
+    return grouped;
+}
+
+function renderOrderRows(groupedOrders, isAdmin) {
+    const tableBody = document.getElementById('orderHistoryTableBody');
+    
+    groupedOrders.forEach(groupedOrder => {
+        // For POS orders, create a single row with all items
+        if (groupedOrder.isPOS) {
+            renderPOSOrderRow(groupedOrder, tableBody, isAdmin);
+        } else {
+            // Regular orders - render normally
+            renderRegularOrderRow(groupedOrder.items[0], tableBody, isAdmin);
+        }
+    });
+}
+
+function renderRegularOrderRow(order, tableBody, isAdmin) {
+    const row = document.createElement('tr');
+    const orderDate = new Date(order.OrderDate);
+    const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    
+    console.log('Order:', order.OrderNumber, 'Status:', order.Status, 'isAdmin:', isAdmin);
+    
+    const statusBadge = `<span class="badge ${
+        order.Status === 'PENDING' ? 'bg-warning' : 
+        order.Status === 'CONFIRMED' ? 'bg-info' : 
+        order.Status === 'SHIPPED' ? 'bg-primary' : 
+        'bg-success'
+    }">${order.Status}</span>`;
+    
+    // Show appropriate action button based on order status and user role
+    let actionBtn;
+    if (isAdmin) {
+        // Manager/Admin view - show management buttons
+        if (order.Status === 'PENDING') {
+            actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
+                <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
+                    <i class="fa-solid fa-eye me-1"></i>View</button>
+                <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
+                    <i class="fa-solid fa-times me-1"></i>Cancel</button>
+                <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
+                    <i class="fa-solid fa-truck me-1"></i>Ship</button>
+                <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
+                    <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
+            </div>`;
+        } else {
+            actionBtn = `<div class="d-flex gap-2 justify-content-center w-100">
+                <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
+                    <i class="fa-solid fa-eye me-1"></i>View</button>
+            </div>`;
+        }
+    } else {
+        // Regular user view - show cancel/delivery and view buttons
+        if (order.Status === 'PENDING') {
+            actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
+                <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
+                    <i class="fa-solid fa-eye me-1"></i>Receipt</button>
+                <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
+                    <i class="fa-solid fa-times me-1"></i>Cancel</button></div>`;
+        } else if (order.Status === 'SHIPPED') {
+            actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
+                <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
+                    <i class="fa-solid fa-eye me-1"></i>Receipt</button>
+                <button class="btn btn-sm btn-success" onclick="showDeliveryConfirmModal(${order.OrderID}, '${order.OrderNumber}')">
+                    <i class="fa-solid fa-box-open me-1"></i>Confirm</button></div>`;
+        } else {
+            actionBtn = `<div class="d-flex justify-content-center w-100">
+                <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
+                    <i class="fa-solid fa-eye me-1"></i>Receipt</button>
+            </div>`;
+        }
+    }
+    
+    // Build the row content
+    let rowContent = `
+        <td><strong>${order.OrderNumber}</strong></td>`;
+    
+    // Add customer name cell if showing all orders
+    if (isAdmin) {
+        const customerName = order.UserFullName || order.Username || 'Unknown';
+        rowContent += `<td>${customerName}</td>`;
+    }
+    
+    rowContent += `
+        <td>${order.ProductName}</td>
+        <td>${order.Quantity}</td>
+        <td>
+            <div class="small">
+                <strong>₱${parseFloat(order.UnitPrice).toFixed(2)}</strong>/unit
+            </div>
+            <div class="text-muted small">
+                Total: <strong>₱${parseFloat(order.TotalPrice).toFixed(2)}</strong>
+            </div>
+        </td>
+        <td>${formattedDate}</td>
+        <td>${statusBadge}</td>
+        <td>${actionBtn}</td>
+    `;
+    
+    row.innerHTML = rowContent;
+    tableBody.appendChild(row);
+}
+
+function renderPOSOrderRow(groupedOrder, tableBody, isAdmin) {
+    const row = document.createElement('tr');
+    const orderDate = new Date(groupedOrder.OrderDate);
+    const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    
+    // For POS orders, always show "POS" status
+    const statusBadge = `<span class="badge bg-success">POS</span>`;
+    
+    // For POS orders, show only "View Receipt" button
+    const actionBtn = `<div class="d-flex justify-content-center w-100">
+        <button class="btn btn-sm btn-info" onclick="showPOSReceiptModal('${btoa(JSON.stringify(groupedOrder))}')">
+            <i class="fa-solid fa-eye me-1"></i>View</button>
+    </div>`;
+    
+    // Build the row content
+    let rowContent = `
+        <td><strong>${groupedOrder.OrderNumber}</strong></td>`;
+    
+    // Add customer name cell if showing all orders (always "Walk-In Customer" for POS)
+    if (isAdmin) {
+        rowContent += `<td>Walk-In Customer</td>`;
+    }
+    
+    // Show product list for grouped POS order
+    const productList = groupedOrder.items.map(item => item.ProductName).join(', ');
+    const totalQuantity = groupedOrder.items.reduce((sum, item) => sum + item.Quantity, 0);
+    const totalPrice = groupedOrder.items.reduce((sum, item) => sum + parseFloat(item.TotalPrice), 0);
+    
+    rowContent += `
+        <td><small>${productList}</small></td>
+        <td>${totalQuantity}</td>
+        <td>
+            <div class="small">
+                <strong>₱${(totalPrice / totalQuantity).toFixed(2)}</strong>/unit avg
+            </div>
+            <div class="text-muted small">
+                Total: <strong>₱${totalPrice.toFixed(2)}</strong>
+            </div>
+        </td>
+        <td>${formattedDate}</td>
+        <td>${statusBadge}</td>
+        <td>${actionBtn}</td>
+    `;
+    
+    row.innerHTML = rowContent;
+    tableBody.appendChild(row);
 }
 
 function showOrderDetailsModal(encodedOrder) {
@@ -1533,6 +2325,195 @@ function showOrderDetailsModal(encodedOrder) {
     // Show modal
     const bootstrapModal = new bootstrap.Modal(modal);
     bootstrapModal.show();
+}
+
+function showPOSReceiptModal(encodedGroupedOrder) {
+    // Decode the grouped order data from base64
+    const groupedOrder = JSON.parse(atob(encodedGroupedOrder));
+    
+    const modal = document.getElementById('adminModal');
+    const modalHeader = document.getElementById('modalHeader');
+    const modalTitle = document.getElementById('adminModalLabel');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+    
+    // Set header
+    modalHeader.className = 'modal-header bg-success text-white';
+    modalTitle.textContent = `POS Receipt - ${groupedOrder.OrderNumber}`;
+    
+    // Format date
+    const orderDate = new Date(groupedOrder.OrderDate);
+    const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedTime = orderDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    
+    // Get payment method icon from first item
+    let paymentMethodIcon = '';
+    let paymentMethodDisplay = groupedOrder.items[0].PaymentMethod || 'Cash';
+    if (paymentMethodDisplay === 'Cash') {
+        paymentMethodIcon = '<i class="fa-solid fa-money-bill text-success me-2"></i>';
+    } else if (paymentMethodDisplay === 'GCASH') {
+        paymentMethodIcon = '<i class="fa-solid fa-mobile text-info me-2"></i>';
+    } else if (paymentMethodDisplay === 'Card') {
+        paymentMethodIcon = '<i class="fa-solid fa-credit-card text-warning me-2"></i>';
+    }
+    
+    // Calculate totals
+    let totalQuantity = 0;
+    let totalPrice = 0;
+    let itemsHTML = '<table class="table table-sm"><tbody>';
+    
+    groupedOrder.items.forEach(item => {
+        totalQuantity += item.Quantity;
+        totalPrice += parseFloat(item.TotalPrice);
+        itemsHTML += `
+            <tr>
+                <td><strong>${item.ProductName}</strong></td>
+                <td class="text-end">${item.Quantity}x</td>
+                <td class="text-end">₱${parseFloat(item.UnitPrice).toFixed(2)}</td>
+                <td class="text-end">₱${parseFloat(item.TotalPrice).toFixed(2)}</td>
+            </tr>
+        `;
+    });
+    
+    itemsHTML += '</tbody></table>';
+    
+    // Create POS receipt display
+    modalBody.innerHTML = `
+        <div class="order-details">
+            <div class="text-center mb-4 pb-3 border-bottom">
+                <h5 class="mb-2"><i class="fa-solid fa-receipt me-2"></i>POS Receipt</h5>
+                <p class="mb-0"><strong>${groupedOrder.OrderNumber}</strong></p>
+                <p class="text-muted small mb-0">${formattedDate} ${formattedTime}</p>
+            </div>
+            
+            <!-- Items List -->
+            <div class="mb-4">
+                <label class="fw-bold text-muted small mb-2">Items Purchased</label>
+                ${itemsHTML}
+            </div>
+            
+            <!-- Totals -->
+            <div class="row mb-4 pb-3 border-bottom">
+                <div class="col-6 text-end">
+                    <label class="fw-bold text-muted small">Total Items</label>
+                    <p class="mb-0 fs-5"><strong>${totalQuantity}</strong></p>
+                </div>
+                <div class="col-6 text-end">
+                    <label class="fw-bold text-muted small">Total Amount</label>
+                    <p class="mb-0 fs-5 text-success fw-bold">₱${totalPrice.toFixed(2)}</p>
+                </div>
+            </div>
+            
+            <!-- Payment Method -->
+            <div class="row">
+                <div class="col-12">
+                    <label class="fw-bold text-muted small">Payment Method</label>
+                    <p class="mb-0">${paymentMethodIcon}${paymentMethodDisplay}</p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Set footer buttons
+    modalFooter.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-success" onclick="printPOSReceipt('${btoa(JSON.stringify(groupedOrder))}')">
+            <i class="fa-solid fa-download me-2"></i>Print Receipt
+        </button>
+    `;
+    
+    // Show modal
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+}
+
+function printPOSReceipt(encodedGroupedOrder) {
+    // Decode the grouped order
+    const groupedOrder = JSON.parse(atob(encodedGroupedOrder));
+    
+    // Create printable content
+    let printContent = `
+        <html>
+        <head>
+            <title>POS Receipt - ${groupedOrder.OrderNumber}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+                .receipt { max-width: 400px; margin: 0 auto; }
+                h2 { text-align: center; margin: 0 0 10px 0; }
+                .receipt-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
+                .receipt-date { text-align: center; font-size: 12px; color: #666; }
+                table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+                th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
+                th { background-color: #f5f5f5; font-weight: bold; }
+                .amount-right { text-align: right; }
+                .total-row { font-weight: bold; font-size: 14px; }
+                .receipt-footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+            </style>
+        </head>
+        <body>
+            <div class="receipt">
+                <div class="receipt-header">
+                    <h2>Dairy Box GenTri</h2>
+                    <p class="receipt-date">POS Receipt</p>
+                </div>
+                <p><strong>Receipt #:</strong> ${groupedOrder.OrderNumber}</p>
+                <p><strong>Date:</strong> ${new Date(groupedOrder.OrderDate).toLocaleDateString()}</p>
+                <p><strong>Time:</strong> ${new Date(groupedOrder.OrderDate).toLocaleTimeString()}</p>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Item</th>
+                            <th class="amount-right">Qty</th>
+                            <th class="amount-right">Price</th>
+                            <th class="amount-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+    
+    let totalAmount = 0;
+    groupedOrder.items.forEach(item => {
+        totalAmount += parseFloat(item.TotalPrice);
+        printContent += `
+                        <tr>
+                            <td>${item.ProductName}</td>
+                            <td class="amount-right">${item.Quantity}</td>
+                            <td class="amount-right">₱${parseFloat(item.UnitPrice).toFixed(2)}</td>
+                            <td class="amount-right">₱${parseFloat(item.TotalPrice).toFixed(2)}</td>
+                        </tr>
+        `;
+    });
+    
+    printContent += `
+                    </tbody>
+                </table>
+                
+                <div style="border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 10px 0; margin: 20px 0;">
+                    <p class="total-row" style="text-align: right;">TOTAL: ₱${totalAmount.toFixed(2)}</p>
+                </div>
+                
+                <p><strong>Payment Method:</strong> ${groupedOrder.items[0].PaymentMethod || 'Cash'}</p>
+                
+                <div class="receipt-footer">
+                    <p>Thank you for your purchase!</p>
+                    <p>Visit us again soon.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+    
+    // Open print dialog
+    const printWindow = window.open('', '', 'height=500,width=600');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    
+    // Print and close
+    setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+    }, 250);
 }
 
 function printOrderReceipt(encodedOrder) {

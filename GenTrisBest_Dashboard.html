@@ -223,6 +223,11 @@
                                 <i class="fa-solid fa-boxes-stacked"></i> Inventory
                             </a>
                         </li>
+                        <li class="nav-item" id="posNavItem" style="display: none;">
+                            <a class="nav-link" href="#" onclick="showSection('pos'); loadPOSProducts()">
+                                <i class="fa-solid fa-cash-register"></i> POS
+                            </a>
+                        </li>
                         <li class="nav-item" id="reportsNavItem">
                             <a class="nav-link" href="#" onclick="showSection('reports')">
                                 <i class="fa-solid fa-file-invoice"></i> Reports
@@ -344,7 +349,7 @@
                                             <th>Total Price</th>
                                             <th>Order Date</th>
                                             <th>Status</th>
-                                            <th>Action</th>
+                                            <th class="text-center">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="todaysSalesTableBody">
@@ -360,8 +365,8 @@
                     </div>
 
                     <!-- All Order History Container -->
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-sky text-white d-flex justify-content-between">
                             <h5 class="mb-0"><i class="fa-solid fa-history me-2"></i>All Order History</h5>
                             <span class="badge bg-light text-sky" id="orderHistoryCount">0 orders</span>
                         </div>
@@ -389,7 +394,7 @@
                                             <th>Total Price</th>
                                             <th>Order Date</th>
                                             <th>Status</th>
-                                            <div class=""><th>Action</th></div>     
+                                            <th class="text-center">Action</th>     
                                         </tr>
                                     </thead>
                                     <tbody id="orderHistoryTableBody">
@@ -497,6 +502,49 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <!-- POS Section (Front Desk Only) -->
+                <section id="posSection" style="display: none;">
+                    <div class="row g-4">
+                        <!-- Products Column -->
+                        <div class="col-lg-8">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                                    <h5 class="mb-0"><i class="fa-solid fa-cash-register me-2"></i>Point of Sale - Walk-in Customers</h5>
+                                    <span class="badge bg-light text-sky" id="posProductCount">0 available</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-4">
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white border-end-0">
+                                                <i class="fa-solid fa-magnifying-glass text-sky"></i>
+                                            </span>
+                                            <input type="text" autocomplete="off" class="form-control border-start-0" id="searchPOSProducts" placeholder="Search by product name or category...">
+                                        </div>
+                                    </div>
+                                    <div class="row" id="posProductsContainer">
+                                        <div class="col-12 text-center text-muted py-5">
+                                            <i class="fa-solid fa-spinner fa-spin me-2"></i> Loading products...
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Shopping Cart Column -->
+                        <div class="col-lg-4">
+                            <div id="posCartContainer">
+                                <div class="text-center text-muted py-5">
+                                    <i class="fa-solid fa-shopping-cart me-2"></i>Cart is empty
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Full Width Cart Summary (appears below when items exist) -->
+                    <div class="mt-4" id="posCartSummaryContainer" style="display: none;">
                     </div>
                 </section>
 

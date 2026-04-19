@@ -30,10 +30,10 @@ $params = array($username);
 $stmt = sqlsrv_query($conn, $checkUserSql, $params);
 $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
 
-// Check if user has permission to access inventory (ADMIN, Inventory, Manager)
-$allowedRoles = ['ADMIN', 'INVENTORY', 'MANAGER'];
+// Check if user has permission to access inventory (ADMIN, Inventory, Manager, Front Desk)
+$allowedRoles = ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'];
 if (!$row || !in_array($row['AccountType'], $allowedRoles)) {
-    echo json_encode(['success' => false, 'error' => 'Inventory access required. Allowed roles: ADMIN, INVENTORY, MANAGER']);
+    echo json_encode(['success' => false, 'error' => 'Inventory access required. Allowed roles: ADMIN, INVENTORY, MANAGER, FRONT DESK']);
     exit();
 }
 

@@ -107,7 +107,7 @@ $ordersTableResult = sqlsrv_query($conn, $checkOrdersTableSql);
 if (!$ordersTableResult || sqlsrv_fetch_array($ordersTableResult) === null) {
     $createOrdersTableSql = "CREATE TABLE Orders (
         OrderID INT IDENTITY(1,1) PRIMARY KEY,
-        OrderNumber NVARCHAR(50) NOT NULL UNIQUE,
+        OrderNumber NVARCHAR(50) NOT NULL,
         Username NVARCHAR(50) NOT NULL,
         ProductID INT NOT NULL,
         ProductName NVARCHAR(100) NOT NULL,
@@ -175,6 +175,35 @@ if ($stmt && sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
         $output[] = "  Password: " . $adminPassword;
     } else {
         $output[] = "✗ Failed to create admin account: " . print_r(sqlsrv_errors(), true);
+    }
+}
+
+// Step 6: Create WALKIN_CUSTOMER account for POS transactions
+$walkInUsername = "WALKIN_CUSTOMER";
+
+$checkWalkInSql = "SELECT * FROM Users WHERE Username = ?";
+$params = array($walkInUsername);
+$stmt = sqlsrv_query($conn, $checkWalkInSql, $params);
+
+if ($stmt && sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+    $output[] = "✓ WALKIN_CUSTOMER account already exists";
+} else {
+    // Insert WALKIN_CUSTOMER account
+    $insertWalkInSql = "INSERT INTO Users (FirstName, LastName, Username, Email, ContactNumber, Password, AccountType) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    $walkInParams = array(
+        "Walk-In",
+        "Customer",
+        $walkInUsername,
+        "walkin@gentrisbest.com",
+        "N/A",
+        "system_generated",
+        "GUEST"
+    );
+    
+    if (sqlsrv_query($conn, $insertWalkInSql, $walkInParams)) {
+        $output[] = "✓ WALKIN_CUSTOMER account created successfully (for POS transactions)";
+    } else {
+        $output[] = "✗ Failed to create WALKIN_CUSTOMER account: " . print_r(sqlsrv_errors(), true);
     }
 }
 
