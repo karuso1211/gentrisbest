@@ -60,6 +60,8 @@ if ($action === 'get_available_products') {
     $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : null;
     $notes = isset($_POST['notes']) ? trim($_POST['notes']) : null;
     $paymentMethod = isset($_POST['paymentMethod']) ? trim($_POST['paymentMethod']) : 'Cash On Delivery';
+    $deliveryAddress = isset($_POST['deliveryAddress']) ? trim($_POST['deliveryAddress']) : null;
+    $deliveryFee = isset($_POST['deliveryFee']) ? floatval($_POST['deliveryFee']) : 0;
     
     // Validate payment method
     $validPaymentMethods = ['Cash On Delivery', 'GCASH', 'Card'];
@@ -101,13 +103,14 @@ if ($action === 'get_available_products') {
     // Generate order number
     $orderNumber = 'ORD-' . date('Ymd') . '-' . uniqid();
     
-    // Calculate total price
-    $totalPrice = $unitPrice * $quantity;
-    
+    // Calculate total price (product subtotal + delivery fee)
+    $subtotal = $unitPrice * $quantity;
+    $totalPrice = $subtotal + $deliveryFee;
+
     // Insert order
-    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, PaymentMethod, Notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    $insertParams = array($orderNumber, $username, $productId, $product['ProductName'], $quantity, $unitPrice, $totalPrice, $paymentMethod, $notes);
+    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, PaymentMethod, Notes, DeliveryAddress, DeliveryFee)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $insertParams = array($orderNumber, $username, $productId, $product['ProductName'], $quantity, $unitPrice, $totalPrice, $paymentMethod, $notes, $deliveryAddress, $deliveryFee);
     
     if (sqlsrv_query($conn, $insertSql, $insertParams)) {
         // Reduce product quantity
@@ -119,10 +122,13 @@ if ($action === 'get_available_products') {
             'success' => true,
             'message' => 'Order placed successfully',
             'orderNumber' => $orderNumber,
+            'subtotal' => number_format($subtotal, 2),
+            'deliveryFee' => number_format($deliveryFee, 2),
             'totalPrice' => number_format($totalPrice, 2),
             'priceType' => $priceType,
             'unitPrice' => number_format($unitPrice, 2),
-            'quantity' => $quantity
+            'quantity' => $quantity,
+            'deliveryAddress' => $deliveryAddress
         ]);
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to place order']);
@@ -187,8 +193,8 @@ if ($action === 'get_available_products') {
     $totalPrice = $unitPrice * $quantity;
     
     // Insert POS transaction (using Orders table with special username)
-    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, PaymentMethod, Notes)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $insertSql = "INSERT INTO Orders (OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, PaymentMethod, Notes, Status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DELIVERED')";
     $insertParams = array($transactionId, 'WALKIN_CUSTOMER', $productId, $product['ProductName'], $quantity, $unitPrice, $totalPrice, $paymentMethod, 'POS Transaction by ' . $username);
     
     $insertResult = sqlsrv_query($conn, $insertSql, $insertParams);
@@ -231,7 +237,7 @@ if ($action === 'get_available_products') {
     
 } elseif ($action === 'get_order_history') {
     // Fetch user's orders
-    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, PaymentMethod
+    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, Status, PaymentMethod
             FROM Orders
             WHERE Username = ?
             ORDER BY OrderDate DESC";
@@ -263,8 +269,9 @@ if ($action === 'get_available_products') {
     }
     
     // Fetch all orders with user information
-    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, OrderDate, Status, PaymentMethod,
-                   (SELECT CONCAT(FirstName, ' ', LastName) FROM Users WHERE Username = Orders.Username) AS UserFullName
+    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, Status, PaymentMethod,
+                   (SELECT CONCAT(FirstName, ' ', LastName) FROM Users WHERE Username = Orders.Username) AS UserFullName,
+                   (SELECT ContactNumber FROM Users WHERE Username = Orders.Username) AS UserContactNumber
             FROM Orders
             ORDER BY OrderDate DESC";
     

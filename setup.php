@@ -146,6 +146,36 @@ if (!$paymentMethodResult || sqlsrv_fetch_array($paymentMethodResult) === null) 
     $output[] = "✓ PaymentMethod column already exists";
 }
 
+// Step 4.6: Add DeliveryAddress column to Orders if it doesn't exist
+$checkDeliveryAddressSql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Orders' AND COLUMN_NAME='DeliveryAddress'";
+$deliveryAddressResult = sqlsrv_query($conn, $checkDeliveryAddressSql);
+
+if (!$deliveryAddressResult || sqlsrv_fetch_array($deliveryAddressResult) === null) {
+    $addDeliveryAddressSql = "ALTER TABLE Orders ADD DeliveryAddress NVARCHAR(500) NULL";
+    if (sqlsrv_query($conn, $addDeliveryAddressSql)) {
+        $output[] = "✓ Added DeliveryAddress column to Orders table";
+    } else {
+        $output[] = "✗ Failed to add DeliveryAddress column: " . print_r(sqlsrv_errors(), true);
+    }
+} else {
+    $output[] = "✓ DeliveryAddress column already exists";
+}
+
+// Step 4.7: Add DeliveryFee column to Orders if it doesn't exist
+$checkDeliveryFeeSql = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Orders' AND COLUMN_NAME='DeliveryFee'";
+$deliveryFeeResult = sqlsrv_query($conn, $checkDeliveryFeeSql);
+
+if (!$deliveryFeeResult || sqlsrv_fetch_array($deliveryFeeResult) === null) {
+    $addDeliveryFeeSql = "ALTER TABLE Orders ADD DeliveryFee DECIMAL(10, 2) DEFAULT 0";
+    if (sqlsrv_query($conn, $addDeliveryFeeSql)) {
+        $output[] = "✓ Added DeliveryFee column to Orders table";
+    } else {
+        $output[] = "✗ Failed to add DeliveryFee column: " . print_r(sqlsrv_errors(), true);
+    }
+} else {
+    $output[] = "✓ DeliveryFee column already exists";
+}
+
 // Step 5: Create default admin account
 $adminUsername = "admin123";
 $adminPassword = "password12345";

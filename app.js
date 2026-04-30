@@ -303,7 +303,7 @@ function displayUserData(userData) {
     } else {
         // Show tabs for authenticated users based on their role
         // Reports tab is visible only to ADMIN, INVENTORY, MANAGER
-        const reportRoles = ['ADMIN', 'INVENTORY', 'MANAGER'];
+        const reportRoles = ['ADMIN', 'MANAGER'];
         if (reportRoles.includes(userData.accountType)) {
             if (reportsNavItem) reportsNavItem.style.display = 'block';
         } else {
@@ -908,21 +908,61 @@ function displayBrowseProducts(products) {
     });
 }
 
+// Store pin: Purok 1, Barangay Santiago, General Trias, Cavite, Philippines
+const STORE_LAT = 14.3861207;
+const STORE_LNG = 120.8802855;
+
+// Lalamove motorcycle rate (Philippines): ₱79 base (first 5 km) + ₱12/km after
+const LALAMOVE_BASE_FARE = 79;
+const LALAMOVE_BASE_KM = 5;
+const LALAMOVE_PER_KM = 12;
+// Road distance is typically ~1.3x straight-line (haversine) distance
+const ROAD_FACTOR = 1.3;
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calcLalamoveFee(km) {
+    if (km <= LALAMOVE_BASE_KM) return LALAMOVE_BASE_FARE;
+    return LALAMOVE_BASE_FARE + Math.ceil(km - LALAMOVE_BASE_KM) * LALAMOVE_PER_KM;
+}
+
+async function geocodeAddress(address) {
+    const query = encodeURIComponent(address + ', Philippines');
+    const url = `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1&countrycodes=ph`;
+    try {
+        const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data && data.length > 0) {
+            return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), display: data[0].display_name };
+        }
+    } catch (_) {}
+    return null;
+}
+
 function showOrderModal(productId, productName, price, wholesalePrice) {
     const modal = document.getElementById('adminModal');
+    const modalDialog = document.getElementById('adminModalDialog');
     const modalHeader = document.getElementById('modalHeader');
     const modalTitle = document.getElementById('adminModalLabel');
     const modalBody = document.getElementById('modalBody');
     const modalFooter = document.getElementById('modalFooter');
-    
+
+    // Make wider for the map
+    modalDialog.className = 'modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable';
+
     const regularPrice = parseFloat(price);
     const wholesale = wholesalePrice && parseFloat(wholesalePrice) > 0 ? parseFloat(wholesalePrice) : null;
-    
-    // Set header
+
     modalHeader.className = 'modal-header bg-sky text-white';
     modalTitle.textContent = 'Place Order';
-    
-    // Create form content
+
     modalBody.innerHTML = `
         <form id="orderForm">
             <div class="mb-3">
@@ -933,112 +973,372 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
                 <label for="orderQuantity" class="form-label fw-medium">Quantity</label>
                 <input type="number" class="form-control" id="orderQuantity" min="1" value="1" required>
             </div>
+
+            <hr class="my-3">
+            <h6 class="fw-semibold mb-2"><i class="fa-solid fa-truck me-2 text-sky"></i>Delivery Details</h6>
+
+            <div class="mb-2">
+                <label for="deliveryAddress" class="form-label fw-medium">
+                    Delivery Address <span class="text-danger">*</span>
+                </label>
+                <div class="input-group">
+                    <input type="text" class="form-control" id="deliveryAddress"
+                        placeholder="Type address or use map / GPS below" required autocomplete="off">
+                    <span class="input-group-text bg-white" id="geocodeStatus">
+                        <i class="fa-solid fa-location-dot text-muted"></i>
+                    </span>
+                </div>
+                <small id="geocodeHint" class="text-muted">
+                    Type your address, or use the buttons below to set your location.
+                </small>
+            </div>
+
+            <div class="d-flex gap-2 mb-3">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="toggleMapBtn">
+                    <i class="fa-solid fa-map-location-dot me-1"></i>Pin on Map
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="useGpsBtn">
+                    <i class="fa-solid fa-crosshairs me-1"></i>Use My Location
+                </button>
+            </div>
+
+            <div id="mapPickerSection" style="display:none;" class="mb-3">
+                <div id="deliveryMap" style="height:300px; border-radius:8px; border:1px solid #dee2e6; z-index:0;"></div>
+                <small class="text-muted mt-1 d-block">
+                    <i class="fa-solid fa-hand-pointer me-1"></i>Click anywhere on the map or drag the
+                    <span style="color:#e74c3c;">&#x25CF;</span> pin to set your delivery location.
+                    <span style="color:#0ea5e9;">&#x25CF;</span> = store.
+                </small>
+            </div>
+
+            <div id="deliveryFeeBreakdown" class="alert alert-secondary py-2 mb-3" style="display:none;">
+                <div class="d-flex justify-content-between small mb-1 text-muted">
+                    <span><i class="fa-solid fa-route me-1"></i>Estimated road distance</span>
+                    <span id="breakdownDistance">—</span>
+                </div>
+                <div class="d-flex justify-content-between small mb-1">
+                    <span>Product Subtotal</span>
+                    <span>₱<span id="breakdownSubtotal">0.00</span></span>
+                </div>
+                <div class="d-flex justify-content-between small mb-1">
+                    <span><i class="fa-solid fa-motorcycle me-1 text-sky"></i>Delivery Fee (Lalamove)</span>
+                    <span>₱<span id="breakdownDelivery">0.00</span></span>
+                </div>
+                <hr class="my-1">
+                <div class="d-flex justify-content-between fw-bold">
+                    <span>Grand Total</span>
+                    <span class="text-sky">₱<span id="breakdownGrandTotal">0.00</span></span>
+                </div>
+                <div class="mt-2 small text-muted">
+                    <i class="fa-solid fa-circle-info me-1"></i>
+                    Rate: ₱${LALAMOVE_BASE_FARE} base (first ${LALAMOVE_BASE_KM} km) + ₱${LALAMOVE_PER_KM}/km after
+                </div>
+            </div>
+
+            <hr class="my-3">
+
             <div class="mb-3">
                 <label for="orderNotes" class="form-label fw-medium">Order Notes (Optional)</label>
-                <textarea class="form-control" id="orderNotes" rows="2" placeholder="Special instructions or notes..."></textarea>
+                <textarea class="form-control" id="orderNotes" rows="2"
+                    placeholder="Special instructions or notes..."></textarea>
             </div>
             <div class="mb-3">
                 <label for="paymentMethod" class="form-label fw-medium">Payment Method</label>
                 <select class="form-select" id="paymentMethod" required>
                     <option value="" disabled selected>Select payment method...</option>
-                    <option value="Cash On Delivery"><i class="fa-solid fa-money-bill"></i> Cash On Delivery (COD)</option>
-                    <option value="GCASH"><i class="fa-solid fa-mobile"></i> GCash</option>
-                    <option value="Card"><i class="fa-solid fa-credit-card"></i> Card</option>
+                    <option value="Cash On Delivery">Cash On Delivery (COD)</option>
+                    <option value="GCASH">GCash</option>
+                    <option value="Card">Card</option>
                 </select>
                 <small class="text-muted d-block mt-2">Choose how you'd like to pay for this order</small>
             </div>
-            <div id="totalPriceDisplay" class="alert alert-info mb-0">
-                <strong>Total Price:</strong> ₱<span id="totalAmount">0.00</span>
-            </div>
         </form>
     `;
-    
-    // Set footer buttons
+
     modalFooter.innerHTML = `
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-sky" id="confirmOrderBtn">Place Order</button>
     `;
-    
-    // Show modal
+
     const bootstrapModal = new bootstrap.Modal(modal);
     bootstrapModal.show();
-    
-    // Function to update price display based on quantity
-    function updatePriceDisplay() {
-        const quantityInput = document.getElementById('orderQuantity');
-        const priceInfoDiv = document.getElementById('priceInfo');
-        const totalAmountSpan = document.getElementById('totalAmount');
-        
-        const qty = parseInt(quantityInput.value) || 0;
-        let applicablePrice = regularPrice;
-        let priceInfoHtml = `<p class="text-muted mb-0">Regular Price: <strong>₱${regularPrice.toFixed(2)}</strong>/unit</p>`;
-        
-        // Check if quantity qualifies for wholesale
+
+    // Reset modal dialog class when this modal closes
+    modal.addEventListener('hidden.bs.modal', () => {
+        modalDialog.className = 'modal-dialog modal-dialog-centered';
+    }, { once: true });
+
+    let currentDeliveryFee = null;
+    let currentDeliveryKm = null;
+    let geocodeTimer = null;
+    let deliveryMap = null;
+    let deliveryMarker = null;
+    let mapInitialized = false;
+
+    // ── helpers ──────────────────────────────────────────────
+
+    function getApplicablePrice(qty) {
+        return (qty >= 10 && wholesale) ? wholesale : regularPrice;
+    }
+
+    function renderPriceInfo(qty) {
+        let html = `<p class="text-muted mb-0">Regular Price: <strong>₱${regularPrice.toFixed(2)}</strong>/unit</p>`;
         if (qty >= 10 && wholesale) {
-            applicablePrice = wholesale;
             const savings = (regularPrice - wholesale) * qty;
-            priceInfoHtml = `
+            html = `
                 <div class="mb-2">
                     <p class="text-muted mb-1"><del>Regular Price: ₱${regularPrice.toFixed(2)}/unit</del></p>
                     <p class="text-success mb-1"><strong>Wholesale Price: ₱${wholesale.toFixed(2)}/unit</strong></p>
-                    <span class="badge bg-success"><i class="fa-solid fa-percentage me-1"></i>Save ₱${savings.toFixed(2)} on this order!</span>
-                </div>
-            `;
+                    <span class="badge bg-success">
+                        <i class="fa-solid fa-percentage me-1"></i>Save ₱${savings.toFixed(2)} on this order!
+                    </span>
+                </div>`;
         } else if (wholesale && qty < 10) {
-            const neededQty = 10 - qty;
-            priceInfoHtml = `
+            const needed = 10 - qty;
+            html = `
                 <p class="text-muted mb-0">Regular Price: <strong>₱${regularPrice.toFixed(2)}</strong>/unit</p>
-                <p class="text-info small mt-2 mb-0"><i class="fa-solid fa-lightbulb me-1"></i>Buy ${neededQty} more unit${neededQty !== 1 ? 's' : ''} to unlock wholesale pricing (₱${wholesale.toFixed(2)}/unit)</p>
-            `;
+                <p class="text-info small mt-2 mb-0">
+                    <i class="fa-solid fa-lightbulb me-1"></i>Buy ${needed} more unit${needed !== 1 ? 's' : ''} to unlock wholesale pricing (₱${wholesale.toFixed(2)}/unit)
+                </p>`;
         }
-        
-        priceInfoDiv.innerHTML = priceInfoHtml;
-        const total = qty * applicablePrice;
-        totalAmountSpan.textContent = total.toFixed(2);
+        document.getElementById('priceInfo').innerHTML = html;
     }
-    
-    // Update price display on quantity change
-    const quantityInput = document.getElementById('orderQuantity');
-    if (quantityInput) {
-        quantityInput.addEventListener('input', updatePriceDisplay);
-        // Initial calculation
-        updatePriceDisplay();
+
+    function renderBreakdown() {
+        const qty = parseInt(document.getElementById('orderQuantity').value) || 0;
+        renderPriceInfo(qty);
+        const bd = document.getElementById('deliveryFeeBreakdown');
+        if (currentDeliveryFee === null || qty === 0) { bd.style.display = 'none'; return; }
+        const subtotal = qty * getApplicablePrice(qty);
+        const grand = subtotal + currentDeliveryFee;
+        bd.style.display = 'block';
+        document.getElementById('breakdownDistance').textContent  = `~${currentDeliveryKm.toFixed(1)} km`;
+        document.getElementById('breakdownSubtotal').textContent  = subtotal.toFixed(2);
+        document.getElementById('breakdownDelivery').textContent  = currentDeliveryFee.toFixed(2);
+        document.getElementById('breakdownGrandTotal').textContent = grand.toFixed(2);
     }
-    
-    // Handle order confirmation
-    document.getElementById('confirmOrderBtn').onclick = function() {
-        const quantity = document.getElementById('orderQuantity').value;
+
+    function setGeoStatus(state) {
+        const icon = document.querySelector('#geocodeStatus i');
+        const hint = document.getElementById('geocodeHint');
+        const map = { loading: ['fa-solid fa-spinner fa-spin text-secondary', '<span class="text-secondary">Locating address…</span>'],
+                      ok:      ['fa-solid fa-circle-check text-success',   '<span class="text-success">Location found — fee calculated below.</span>'],
+                      error:   ['fa-solid fa-circle-xmark text-danger',    '<span class="text-danger">Address not found. Try a more specific address or use the map.</span>'],
+                      idle:    ['fa-solid fa-location-dot text-muted',     'Type your address, or use the buttons below to set your location.'] };
+        const [cls, msg] = map[state] || map.idle;
+        icon.className = cls;
+        hint.innerHTML = msg;
+    }
+
+    function applyCoords(lat, lng) {
+        const straightKm = haversineKm(STORE_LAT, STORE_LNG, lat, lng);
+        currentDeliveryKm = straightKm * ROAD_FACTOR;
+        currentDeliveryFee = calcLalamoveFee(currentDeliveryKm);
+        renderBreakdown();
+    }
+
+    // ── map picker ───────────────────────────────────────────
+
+    function initLeafletMap() {
+        if (mapInitialized) {
+            deliveryMap.invalidateSize();
+            return;
+        }
+        mapInitialized = true;
+
+        deliveryMap = L.map('deliveryMap', { zoomControl: true }).setView([STORE_LAT, STORE_LNG], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(deliveryMap);
+
+        // Store marker (fixed, blue)
+        const storeIcon = L.divIcon({
+            html: `<div style="background:#0ea5e9;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.4);"></div>`,
+            className: '', iconAnchor: [7, 7]
+        });
+        L.marker([STORE_LAT, STORE_LNG], { icon: storeIcon, interactive: false })
+            .addTo(deliveryMap)
+            .bindTooltip("GenTri's Best Store", { permanent: false });
+
+        // Delivery marker (draggable, red) — starts hidden until user picks
+        const deliveryIcon = L.divIcon({
+            html: `<div style="background:#e74c3c;width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.4);"></div>`,
+            className: '', iconAnchor: [8, 16]
+        });
+        deliveryMarker = L.marker([STORE_LAT, STORE_LNG], {
+            icon: deliveryIcon, draggable: true, opacity: 0
+        }).addTo(deliveryMap).bindTooltip('Your delivery location');
+
+        deliveryMarker.on('dragend', async () => {
+            const { lat, lng } = deliveryMarker.getLatLng();
+            await onPinSet(lat, lng);
+        });
+
+        deliveryMap.on('click', async (e) => {
+            deliveryMarker.setLatLng(e.latlng);
+            deliveryMarker.setOpacity(1);
+            await onPinSet(e.latlng.lat, e.latlng.lng);
+        });
+    }
+
+    async function onPinSet(lat, lng) {
+        applyCoords(lat, lng);
+        setGeoStatus('loading');
+        try {
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+                { headers: { 'Accept': 'application/json' } }
+            );
+            const data = await res.json();
+            if (data && data.display_name) {
+                document.getElementById('deliveryAddress').value = data.display_name;
+                setGeoStatus('ok');
+                return;
+            }
+        } catch (_) {}
+        // Fee is still calculated even if reverse-geocode fails
+        document.getElementById('deliveryAddress').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setGeoStatus('ok');
+    }
+
+    function placeMarkerAt(lat, lng) {
+        if (!mapInitialized) return;
+        deliveryMarker.setLatLng([lat, lng]);
+        deliveryMarker.setOpacity(1);
+        deliveryMap.setView([lat, lng], 16);
+    }
+
+    // ── button wiring ────────────────────────────────────────
+
+    document.getElementById('toggleMapBtn').addEventListener('click', () => {
+        const section = document.getElementById('mapPickerSection');
+        const btn = document.getElementById('toggleMapBtn');
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+            btn.innerHTML = '<i class="fa-solid fa-map-location-dot me-1"></i>Hide Map';
+            btn.classList.replace('btn-outline-primary', 'btn-primary');
+            // Leaflet must init after the div is visible
+            setTimeout(initLeafletMap, 50);
+        } else {
+            section.style.display = 'none';
+            btn.innerHTML = '<i class="fa-solid fa-map-location-dot me-1"></i>Pin on Map';
+            btn.classList.replace('btn-primary', 'btn-outline-primary');
+        }
+    });
+
+    document.getElementById('useGpsBtn').addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            setGeoStatus('error');
+            document.getElementById('geocodeHint').innerHTML =
+                '<span class="text-danger">GPS not supported by your browser.</span>';
+            return;
+        }
+        const btn = document.getElementById('useGpsBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Getting location…';
+
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const { latitude, longitude } = pos.coords;
+
+                // Show map automatically when GPS fires
+                const section = document.getElementById('mapPickerSection');
+                if (section.style.display === 'none') {
+                    document.getElementById('toggleMapBtn').click();
+                }
+
+                // Wait for map init then place marker
+                setTimeout(async () => {
+                    placeMarkerAt(latitude, longitude);
+                    await onPinSet(latitude, longitude);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-crosshairs me-1"></i>Use My Location';
+                }, 150);
+            },
+            () => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-crosshairs me-1"></i>Use My Location';
+                setGeoStatus('error');
+                document.getElementById('geocodeHint').innerHTML =
+                    '<span class="text-danger">Could not get your location. Please allow location access or type your address.</span>';
+            }
+        );
+    });
+
+    // ── address text-input geocoding (debounced) ─────────────
+
+    document.getElementById('deliveryAddress').addEventListener('input', () => {
+        clearTimeout(geocodeTimer);
+        const addr = document.getElementById('deliveryAddress').value.trim();
+        if (addr.length < 8) {
+            currentDeliveryFee = null;
+            currentDeliveryKm = null;
+            setGeoStatus('idle');
+            renderBreakdown();
+            return;
+        }
+        setGeoStatus('loading');
+        geocodeTimer = setTimeout(async () => {
+            const result = await geocodeAddress(addr);
+            if (!result) {
+                currentDeliveryFee = null;
+                currentDeliveryKm = null;
+                setGeoStatus('error');
+                renderBreakdown();
+                return;
+            }
+            applyCoords(result.lat, result.lng);
+            setGeoStatus('ok');
+            renderBreakdown();
+            // Sync map pin if map is open
+            if (mapInitialized) placeMarkerAt(result.lat, result.lng);
+        }, 900);
+    });
+
+    document.getElementById('orderQuantity').addEventListener('input', renderBreakdown);
+    renderPriceInfo(1);
+
+    // ── confirm order ────────────────────────────────────────
+
+    document.getElementById('confirmOrderBtn').onclick = function () {
+        const quantity = parseInt(document.getElementById('orderQuantity').value);
         const notes = document.getElementById('orderNotes').value;
         const paymentMethod = document.getElementById('paymentMethod').value;
-        
+        const deliveryAddress = document.getElementById('deliveryAddress').value.trim();
+
         if (!quantity || quantity <= 0) {
-            showModal('Error', 'Please enter a valid quantity', 'bg-warning', [
-                {text: 'Ok', class: 'btn btn-warning', dataDismiss: true}
-            ]);
-            // Reloads the page by reassigning the URL
-            return;
+            return showModal('Error', 'Please enter a valid quantity', 'bg-warning',
+                [{text: 'Ok', class: 'btn btn-warning', dataDismiss: true}]);
         }
-        
+        if (!deliveryAddress) {
+            return showModal('Error', 'Please enter your delivery address or pin your location on the map', 'bg-warning',
+                [{text: 'Ok', class: 'btn btn-warning', dataDismiss: true}]);
+        }
+        if (currentDeliveryFee === null) {
+            return showModal('Error', 'Delivery fee is still being calculated. Please wait or check your address.', 'bg-warning',
+                [{text: 'Ok', class: 'btn btn-warning', dataDismiss: true}]);
+        }
         if (!paymentMethod) {
-            showModal('Error', 'Please select a payment method', 'bg-warning', [
-                {text: 'Ok', class: 'btn btn-warning', dataDismiss: true}
-            ]);
-            return;
+            return showModal('Error', 'Please select a payment method', 'bg-warning',
+                [{text: 'Ok', class: 'btn btn-warning', dataDismiss: true}]);
         }
-        
+
         bootstrapModal.hide();
-        performPlaceOrder(productId, quantity, notes, paymentMethod);
+        performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAddress, currentDeliveryFee);
     };
 }
 
-function performPlaceOrder(productId, quantity, notes, paymentMethod) {
+function performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAddress, deliveryFee) {
     const formData = new FormData();
     formData.append('action', 'place_order');
     formData.append('productId', productId);
     formData.append('quantity', quantity);
     formData.append('notes', notes);
     formData.append('paymentMethod', paymentMethod);
-    
+    formData.append('deliveryAddress', deliveryAddress || '');
+    formData.append('deliveryFee', deliveryFee || 0);
+
     fetch('customer_api.php', {
         method: 'POST',
         body: formData
@@ -1046,15 +1346,13 @@ function performPlaceOrder(productId, quantity, notes, paymentMethod) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            let priceInfo = `<p class="mb-2"><strong>Unit Price:</strong> ₱${data.unitPrice}</p>`;
             let priceTypeNotice = '';
-            
             if (data.priceType === 'WHOLESALE') {
-                priceTypeNotice = `<div class="alert alert-success mt-2 mb-0">
+                priceTypeNotice = `<div class="alert alert-success mt-2 mb-0 py-2">
                     <i class="fa-solid fa-tags me-2"></i><strong>Wholesale pricing applied!</strong>
                 </div>`;
             }
-            
+
             let paymentMethodIcon = '';
             if (paymentMethod === 'Cash On Delivery') {
                 paymentMethodIcon = '<i class="fa-solid fa-money-bill me-1"></i>';
@@ -1063,13 +1361,31 @@ function performPlaceOrder(productId, quantity, notes, paymentMethod) {
             } else if (paymentMethod === 'Card') {
                 paymentMethodIcon = '<i class="fa-solid fa-credit-card me-1"></i>';
             }
-            
+
+            const deliveryFeeDisplay = parseFloat(data.deliveryFee) > 0
+                ? `<div class="border rounded p-2 mb-2 bg-light small">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Product Subtotal</span>
+                        <span>₱${data.subtotal}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted"><i class="fa-solid fa-motorcycle me-1"></i>Delivery Fee</span>
+                        <span>₱${data.deliveryFee}</span>
+                    </div>
+                    <div class="d-flex justify-content-between fw-bold border-top pt-1 mt-1">
+                        <span>Grand Total</span>
+                        <span>₱${data.totalPrice}</span>
+                    </div>
+                   </div>`
+                : `<p class="mb-2"><strong>Total Amount:</strong> ₱${data.totalPrice}</p>`;
+
             showModal(
                 'Order Placed Successfully',
                 `<p class="mb-2"><i class="fa-solid fa-check-circle text-success me-2"></i>Your order has been placed!</p>
                 <p class="mb-2"><strong>Order Number:</strong> ${data.orderNumber}</p>
-                ${priceInfo}
-                <p class="mb-2"><strong>Total Amount:</strong> ₱${data.totalPrice}</p>
+                <p class="mb-2"><strong>Unit Price:</strong> ₱${data.unitPrice}</p>
+                ${deliveryFeeDisplay}
+                ${data.deliveryAddress ? `<p class="mb-2"><strong><i class="fa-solid fa-location-dot me-1"></i>Deliver to:</strong> ${data.deliveryAddress}</p>` : ''}
                 <p class="mb-2"><strong>Payment Method:</strong> ${paymentMethodIcon}${paymentMethod}</p>
                 ${priceTypeNotice}`,
                 'bg-success',
@@ -1742,12 +2058,7 @@ function loadOrderHistory() {
     const apiAction = isAdmin ? 'get_all_orders' : 'get_order_history';
     
     console.log('Loading order history - isAdmin:', isAdmin, 'action:', apiAction);
-    
-    // Load today's sales for admin users
-    if (isAdmin) {
-        loadTodaysSalesData();
-    }
-    
+
     fetch(`customer_api.php?action=${apiAction}`)
         .then(response => {
             console.log('Response status:', response.status);
@@ -1774,20 +2085,6 @@ function loadOrderHistory() {
             if (tableBody) {
                 tableBody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4">Error loading order history: ' + error.message + '</td></tr>';
             }
-        });
-}
-
-function loadTodaysSalesData() {
-    fetch(`customer_api.php?action=get_today_sales`)
-        .then(response => response.json())
-        .then(data => {
-            console.log('Today sales API Response:', data);
-            if (data.success) {
-                displayTodaysSales(data.orders);
-            }
-        })
-        .catch(error => {
-            console.error('Fetch Error for today sales:', error);
         });
 }
 
@@ -1825,14 +2122,14 @@ function displayOrderHistory(orders, isAdmin = false) {
             searchOrdersInput.value = '';
             filterOrderHistory();
         });
-        
+
         window.searchListenersSetup = true;
     }
-    
+
     // Update header based on user type
     if (headerTitle) {
-        headerTitle.innerHTML = isAdmin 
-            ? '<i class="fa-solid fa-history me-2"></i>Today Order History' 
+        headerTitle.innerHTML = isAdmin
+            ? '<i class="fa-solid fa-history me-2"></i>Order History'
             : '<i class="fa-solid fa-history me-2"></i>My Order History';
     }
     
@@ -1848,123 +2145,6 @@ function displayOrderHistory(orders, isAdmin = false) {
     // Group POS orders before rendering
     const groupedOrders = groupPOSOrders(orders);
     renderOrderRows(groupedOrders, isAdmin);
-}
-
-function displayTodaysSales(orders) {
-    const todaysSalesCard = document.getElementById('todaysSalesCard');
-    const tableBody = document.getElementById('todaysSalesTableBody');
-    const orderCount = document.getElementById('todaysSalesCount');
-    
-    if (!tableBody || !todaysSalesCard) return;
-    
-    // Show the today's sales card
-    todaysSalesCard.style.display = 'block';
-    
-    // Store today's sales data
-    window.todaysSalesData = orders;
-    
-    tableBody.innerHTML = '';
-    
-    // Group POS orders before rendering
-    const groupedOrders = groupPOSOrders(orders);
-    
-    orderCount.textContent = `${groupedOrders.length} order${groupedOrders.length !== 1 ? 's' : ''}`;
-    
-    if (groupedOrders.length === 0) {
-        tableBody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-4"><i class="fa-solid fa-calendar me-2"></i>No order made today yet.</td></tr>`;
-        return;
-    }
-    
-    // Render today's sales rows
-    groupedOrders.forEach(groupedOrder => {
-        // Handle POS orders separately
-        if (groupedOrder.isPOS) {
-            const row = document.createElement('tr');
-            const orderDate = new Date(groupedOrder.OrderDate);
-            const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-            
-            const statusBadge = `<span class="badge bg-success">POS</span>`;
-            
-            // Calculate totals
-            let totalQuantity = groupedOrder.items.reduce((sum, item) => sum + item.Quantity, 0);
-            let totalPrice = groupedOrder.items.reduce((sum, item) => sum + parseFloat(item.TotalPrice), 0);
-            const productList = groupedOrder.items.map(item => item.ProductName).join(', ');
-            
-            let actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
-                <button class="btn btn-sm btn-info" onclick="showPOSReceiptModal('${btoa(JSON.stringify(groupedOrder))}')">
-                    <i class="fa-solid fa-eye me-1"></i>Receipt</button>
-            </div>`;
-            
-            row.innerHTML = `
-                <td><strong>${groupedOrder.OrderNumber}</strong></td>
-                <td>Walk-In Customer</td>
-                <td><small>${productList}</small></td>
-                <td>${totalQuantity}</td>
-                <td>
-                    <div class="small">
-                        <strong>₱${(totalPrice / totalQuantity).toFixed(2)}</strong>/unit avg
-                    </div>
-                    <div class="text-muted small">
-                        Total: <strong>₱${totalPrice.toFixed(2)}</strong>
-                    </div>
-                </td>
-                <td>${formattedDate}</td>
-                <td>${statusBadge}</td>
-                <td>${actionBtn}</td>
-            `;
-            
-            tableBody.appendChild(row);
-        } else {
-            // Handle regular orders
-            const order = groupedOrder.items[0];
-            const row = document.createElement('tr');
-            const orderDate = new Date(order.OrderDate);
-            const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-            
-            const statusBadge = `<span class="badge ${
-                order.Status === 'PENDING' ? 'bg-warning' : 
-                order.Status === 'CONFIRMED' ? 'bg-info' : 
-                order.Status === 'SHIPPED' ? 'bg-primary' : 
-                'bg-success'
-            }">${order.Status}</span>`;
-            
-            let actionBtn;
-            if (order.Status === 'PENDING') {
-                actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
-                    <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
-                        <i class="fa-solid fa-times me-1"></i>Cancel</button>
-                    <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
-                        <i class="fa-solid fa-truck me-1"></i>Ship</button>
-                    <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
-                        <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
-                </div>`;
-            } else {
-                actionBtn = '<div class="d-flex justify-content-center w-100"><span class="text-muted small">N/A</span></div>';
-            }
-            
-            const customerName = order.UserFullName || order.Username || 'Unknown';
-            
-            row.innerHTML = `
-                <td><strong>${order.OrderNumber}</strong></td>
-                <td>${customerName}</td>
-                <td>${order.ProductName}</td>
-                <td>${order.Quantity}</td>
-                <td>
-                    <div class="small">
-                        <strong>₱${parseFloat(order.UnitPrice).toFixed(2)}</strong>/unit
-                    </div>
-                    <div class="text-muted small">
-                        Total: <strong>₱${parseFloat(order.TotalPrice).toFixed(2)}</strong>
-                    </div>
-                </td>
-                <td>${formattedDate}</td>
-                <td>${statusBadge}</td>
-                <td>${actionBtn}</td>
-            `;
-            
-            tableBody.appendChild(row);
-        }
-    });
 }
 
 function filterOrderHistory() {
@@ -2083,6 +2263,15 @@ function renderRegularOrderRow(order, tableBody, isAdmin) {
                 <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
                     <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
             </div>`;
+        } else if (order.Status === 'SHIPPED') {
+            actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
+                <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
+                    <i class="fa-solid fa-eye me-1"></i>View</button>
+                <button class="btn btn-sm btn-danger" onclick="showCancelOrderModal(${order.OrderID}, '${order.OrderNumber}', ${order.Quantity})">
+                    <i class="fa-solid fa-times me-1"></i>Cancel</button>
+                <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
+                    <i class="fa-solid fa-box-open me-1"></i>Confirm Delivery</button>
+            </div>`;
         } else {
             actionBtn = `<div class="d-flex gap-2 justify-content-center w-100">
                 <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
@@ -2115,10 +2304,13 @@ function renderRegularOrderRow(order, tableBody, isAdmin) {
     let rowContent = `
         <td><strong>${order.OrderNumber}</strong></td>`;
     
-    // Add customer name cell if showing all orders
+    // Add customer name + phone cell if showing all orders
     if (isAdmin) {
         const customerName = order.UserFullName || order.Username || 'Unknown';
-        rowContent += `<td>${customerName}</td>`;
+        const phone = order.UserContactNumber
+            ? `<div class="text-muted small"><i class="fa-solid fa-phone me-1"></i>${order.UserContactNumber}</div>`
+            : '';
+        rowContent += `<td><div class="fw-medium">${customerName}</div>${phone}</td>`;
     }
     
     rowContent += `
@@ -2257,13 +2449,19 @@ function showOrderDetailsModal(encodedOrder) {
             <!-- Customer Info (if admin) -->
             ${order.UserFullName ? `
             <div class="row mb-4 pb-3 border-bottom">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="fw-bold text-muted small">Customer Name</label>
                     <p class="mb-0">${order.UserFullName}</p>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <label class="fw-bold text-muted small">Username</label>
                     <p class="mb-0">${order.Username}</p>
+                </div>
+                <div class="col-md-4">
+                    <label class="fw-bold text-muted small">
+                        <i class="fa-solid fa-phone me-1"></i>Phone Number
+                    </label>
+                    <p class="mb-0">${order.UserContactNumber || '<span class="text-muted">—</span>'}</p>
                 </div>
             </div>
             ` : ''}
@@ -2281,17 +2479,66 @@ function showOrderDetailsModal(encodedOrder) {
             </div>
             
             <!-- Pricing Details -->
+            ${(() => {
+                const deliveryFee = parseFloat(order.DeliveryFee) || 0;
+                const total       = parseFloat(order.TotalPrice);
+                const subtotal    = total - deliveryFee;
+                if (deliveryFee > 0) {
+                    return `
+                    <div class="row mb-4 pb-3 border-bottom">
+                        <div class="col-12">
+                            <label class="fw-bold text-muted small">Pricing Breakdown</label>
+                            <div class="table-responsive mt-2">
+                                <table class="table table-sm mb-0">
+                                    <tbody>
+                                        <tr>
+                                            <td class="text-muted">Unit Price</td>
+                                            <td class="text-end">₱${parseFloat(order.UnitPrice).toFixed(2)} × ${order.Quantity}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted">Product Subtotal</td>
+                                            <td class="text-end">₱${subtotal.toFixed(2)}</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="text-muted"><i class="fa-solid fa-motorcycle me-1"></i>Delivery Fee (Lalamove)</td>
+                                            <td class="text-end">₱${deliveryFee.toFixed(2)}</td>
+                                        </tr>
+                                        <tr class="table-light fw-bold">
+                                            <td>Grand Total</td>
+                                            <td class="text-end text-success fs-5">₱${total.toFixed(2)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>`;
+                } else {
+                    return `
+                    <div class="row mb-4 pb-3 border-bottom">
+                        <div class="col-md-6">
+                            <label class="fw-bold text-muted small">Unit Price</label>
+                            <p class="mb-0 fs-5">₱${parseFloat(order.UnitPrice).toFixed(2)}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="fw-bold text-muted small">Total Price</label>
+                            <p class="mb-0 fs-5 text-success fw-bold">₱${total.toFixed(2)}</p>
+                        </div>
+                    </div>`;
+                }
+            })()}
+
+            <!-- Delivery Location -->
+            ${order.DeliveryAddress ? `
             <div class="row mb-4 pb-3 border-bottom">
-                <div class="col-md-6">
-                    <label class="fw-bold text-muted small">Unit Price</label>
-                    <p class="mb-0 fs-5">₱${parseFloat(order.UnitPrice).toFixed(2)}</p>
-                </div>
-                <div class="col-md-6">
-                    <label class="fw-bold text-muted small">Total Price</label>
-                    <p class="mb-0 fs-5 text-success fw-bold">₱${parseFloat(order.TotalPrice).toFixed(2)}</p>
+                <div class="col-12">
+                    <label class="fw-bold text-muted small">
+                        <i class="fa-solid fa-location-dot me-1 text-danger"></i>Delivery Location
+                    </label>
+                    <p class="mb-0 mt-1">${order.DeliveryAddress}</p>
                 </div>
             </div>
-            
+            ` : ''}
+
             <!-- Notes -->
             ${order.Notes ? `
             <div class="mb-4">
@@ -2301,7 +2548,7 @@ function showOrderDetailsModal(encodedOrder) {
                 </div>
             </div>
             ` : ''}
-            
+
             <!-- Additional Info -->
             ${order.DeliveryDate ? `
             <div class="row">
@@ -2777,6 +3024,11 @@ function printOrderReceipt(encodedOrder) {
                         <span class="label">Username:</span>
                         <span class="value">${order.Username}</span>
                     </div>
+                    ${order.UserContactNumber ? `
+                    <div class="receipt-row">
+                        <span class="label">📞 Phone Number:</span>
+                        <span class="value">${order.UserContactNumber}</span>
+                    </div>` : ''}
                 </div>
                 ` : ''}
                 
@@ -2799,17 +3051,51 @@ function printOrderReceipt(encodedOrder) {
                 </div>
                 
                 <!-- Pricing Summary -->
-                <div class="pricing-summary">
-                    <div class="pricing-row">
-                        <span class="label">Subtotal:</span>
-                        <span class="value">₱${parseFloat(order.TotalPrice).toFixed(2)}</span>
-                    </div>
-                    <div class="total-row">
-                        <span>TOTAL:</span>
-                        <span>₱${parseFloat(order.TotalPrice).toFixed(2)}</span>
+                ${(() => {
+                    const deliveryFee = parseFloat(order.DeliveryFee) || 0;
+                    const total       = parseFloat(order.TotalPrice);
+                    const subtotal    = total - deliveryFee;
+                    if (deliveryFee > 0) {
+                        return `
+                        <div class="pricing-summary">
+                            <div class="pricing-row">
+                                <span class="label">Product Subtotal:</span>
+                                <span class="value">₱${subtotal.toFixed(2)}</span>
+                            </div>
+                            <div class="pricing-row">
+                                <span class="label">🛵 Delivery Fee (Lalamove):</span>
+                                <span class="value">₱${deliveryFee.toFixed(2)}</span>
+                            </div>
+                            <div class="total-row">
+                                <span>GRAND TOTAL:</span>
+                                <span>₱${total.toFixed(2)}</span>
+                            </div>
+                        </div>`;
+                    } else {
+                        return `
+                        <div class="pricing-summary">
+                            <div class="pricing-row">
+                                <span class="label">Subtotal:</span>
+                                <span class="value">₱${total.toFixed(2)}</span>
+                            </div>
+                            <div class="total-row">
+                                <span>TOTAL:</span>
+                                <span>₱${total.toFixed(2)}</span>
+                            </div>
+                        </div>`;
+                    }
+                })()}
+
+                <!-- Delivery Location -->
+                ${order.DeliveryAddress ? `
+                <div class="receipt-section" style="margin-top: 25px;">
+                    <div class="section-title">📍 Delivery Location</div>
+                    <div style="background-color: #f9f9f9; padding: 12px; border-radius: 4px; font-size: 13px; line-height: 1.5;">
+                        ${order.DeliveryAddress}
                     </div>
                 </div>
-                
+                ` : ''}
+
                 <!-- Payment Method -->
                 <div class="receipt-section" style="margin-top: 25px;">
                     <div class="section-title">Payment Information</div>
@@ -2818,7 +3104,7 @@ function printOrderReceipt(encodedOrder) {
                         <span class="value">${paymentMethodEmoji} ${paymentMethodDisplay}</span>
                     </div>
                 </div>
-                
+
                 <!-- Order Notes -->
                 ${order.Notes ? `
                 <div class="receipt-section">
@@ -3101,6 +3387,109 @@ function showSection(sectionId) {
 // ============================================
 // INVENTORY FUNCTIONS
 // ============================================
+// ============================================
+// REPORTS
+// ============================================
+
+function loadReports() {
+    if (!window.reportListenersSetup) {
+        document.querySelectorAll('input[name="reportPeriod"]').forEach(radio => {
+            radio.addEventListener('change', () => renderReport(radio.value));
+        });
+        window.reportListenersSetup = true;
+    }
+
+    const tableBody = document.getElementById('reportsTableBody');
+    if (tableBody) tableBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i>Loading report...</td></tr>';
+
+    fetch('customer_api.php?action=get_all_orders')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.allReportOrders = data.orders;
+                const checked = document.querySelector('input[name="reportPeriod"]:checked');
+                renderReport(checked ? checked.value : 'today');
+            } else {
+                if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Error: ${data.error}</td></tr>`;
+            }
+        })
+        .catch(err => {
+            if (tableBody) tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">Failed to load report.</td></tr>`;
+        });
+}
+
+function renderReport(period) {
+    const orders = window.allReportOrders || [];
+    const now = new Date();
+    let filtered;
+
+    if (period === 'today') {
+        filtered = orders.filter(o => {
+            const d = new Date(o.OrderDate);
+            return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+        });
+    } else if (period === 'weekly') {
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        filtered = orders.filter(o => new Date(o.OrderDate) >= startOfWeek);
+    } else {
+        filtered = orders.filter(o => {
+            const d = new Date(o.OrderDate);
+            return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        });
+    }
+
+    const labels = { today: "Today's Sales Report", weekly: 'Weekly Sales Report', monthly: 'Monthly Sales Report' };
+    const titleEl = document.getElementById('reportTitle');
+    if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-file-invoice me-2"></i>${labels[period]}`;
+
+    // Exclude PENDING and CANCELLED from confirmed revenue; POS orders always count as completed sales
+    const completed = filtered.filter(o => o.Username === 'WALKIN_CUSTOMER' || (o.Status !== 'CANCELLED' && o.Status !== 'PENDING'));
+    const totalRevenue = completed.reduce((s, o) => s + parseFloat(o.TotalPrice), 0);
+    const pendingRevenue = filtered.filter(o => o.Status === 'PENDING' && o.Username !== 'WALKIN_CUSTOMER').reduce((s, o) => s + parseFloat(o.TotalPrice), 0);
+    const totalQty = completed.reduce((s, o) => s + parseInt(o.Quantity), 0);
+    const avgOrder = completed.length ? totalRevenue / completed.length : 0;
+
+    document.getElementById('reportTotalRevenue').innerHTML =
+        `₱${totalRevenue.toFixed(2)}<br><span class="text-muted fw-normal" style="font-size:0.72rem;">+₱${pendingRevenue.toFixed(2)} pending</span>`;
+    document.getElementById('reportTotalOrders').textContent = completed.length;
+    document.getElementById('reportUnitsSold').textContent = totalQty;
+    document.getElementById('reportAvgOrder').textContent = `₱${avgOrder.toFixed(2)}`;
+    document.getElementById('reportOrderCount').textContent = `${filtered.length} order${filtered.length !== 1 ? 's' : ''}`;
+
+    const tableBody = document.getElementById('reportsTableBody');
+    tableBody.innerHTML = '';
+
+    if (filtered.length === 0) {
+        const periodLabel = period === 'today' ? 'today' : period === 'weekly' ? 'this week' : 'this month';
+        tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4"><i class="fa-solid fa-inbox me-2"></i>No orders found for ${periodLabel}.</td></tr>`;
+        return;
+    }
+
+    filtered.forEach(o => {
+        const date = new Date(o.OrderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        const customer = o.Username === 'WALKIN_CUSTOMER' ? '<span class="badge bg-secondary">Walk-In</span>' : (o.UserFullName || o.Username);
+        const isPOS = o.Username === 'WALKIN_CUSTOMER';
+        const statusColors = { PENDING: 'bg-warning', CONFIRMED: 'bg-info', SHIPPED: 'bg-primary', DELIVERED: 'bg-success', CANCELLED: 'bg-danger' };
+        const badge = isPOS ? '<span class="badge bg-success">POS</span>' : `<span class="badge ${statusColors[o.Status] || 'bg-secondary'}">${o.Status}</span>`;
+        const row = document.createElement('tr');
+        if (o.Status === 'CANCELLED' && !isPOS) row.classList.add('text-muted');
+        row.innerHTML = `
+            <td><strong>${o.OrderNumber}</strong></td>
+            <td>${customer}</td>
+            <td>${o.ProductName}</td>
+            <td>${o.Quantity}</td>
+            <td>₱${parseFloat(o.UnitPrice).toFixed(2)}</td>
+            <td><strong>₱${parseFloat(o.TotalPrice).toFixed(2)}</strong></td>
+            <td>${o.PaymentMethod || '—'}</td>
+            <td>${date}</td>
+            <td>${badge}</td>
+        `;
+        tableBody.appendChild(row);
+    });
+}
+
 // Store all products for search functionality
 let allProducts = [];
 

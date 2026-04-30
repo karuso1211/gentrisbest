@@ -16,14 +16,13 @@ $email = $_POST['email'];
 $password = $_POST['password'];
 $confirmPassword = $_POST['confirmPassword'];
 
-// Validate that passwords match (case-sensitive comparison)
 if ($password !== $confirmPassword) {
     $result = false;
-    $passwordError = "Passwords do not match";
 } else {
+    $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
     $sql = "INSERT INTO Users (FirstName, LastName, Username, ContactNumber, Email, Password)
             VALUES (?, ?, ?, ?, ?, ?)";
-    $params = array($firstname, $lastname, $username, $contact, $email, $password);
+    $params = array($firstname, $lastname, $username, $contact, $email, $hashedPassword);
     $result = sqlsrv_query($conn, $sql, $params);
 }
 ?>
