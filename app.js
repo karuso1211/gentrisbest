@@ -31,7 +31,11 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // Handle login form submission
+        // Handle login form submission (button click or Enter key)
+        loginForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            handleLogin();
+        });
         if (submitBtn) {
             submitBtn.addEventListener('click', function(e) {
                 e.preventDefault();
@@ -1052,6 +1056,12 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
                 </select>
                 <small class="text-muted d-block mt-2">Choose how you'd like to pay for this order</small>
             </div>
+            <div id="gcashPaySection" class="mb-3" style="display:none;">
+                <button type="button" class="btn btn-info w-100" id="gcashPayBtn">
+                    <i class="fa-solid fa-mobile-screen me-2"></i>Pay with GCash
+                </button>
+                <div id="gcashProofStatus" class="mt-2 small" style="display:none;"></div>
+            </div>
         </form>
     `;
 
@@ -1074,6 +1084,102 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
     let deliveryMap = null;
     let deliveryMarker = null;
     let mapInitialized = false;
+    let gcashScreenshotFile = null;
+
+    // ── GCash QR overlay ─────────────────────────────────────
+    if (!document.getElementById('gcashQROverlay')) {
+        const overlayEl = document.createElement('div');
+        overlayEl.id = 'gcashQROverlay';
+        overlayEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1200;align-items:center;justify-content:center;';
+        overlayEl.innerHTML = `
+            <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.35);">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center me-2" style="width:38px;height:38px;background:#0070e0;flex-shrink:0;">
+                        <i class="fa-solid fa-mobile-screen text-white"></i>
+                    </div>
+                    <h5 class="mb-0 fw-bold">Pay with GCash</h5>
+                    <button type="button" id="gcashOverlayClose" class="btn-close ms-auto"></button>
+                </div>
+                <p class="text-muted small mb-3">Scan the QR code below using your GCash app, then upload your transaction screenshot to confirm payment.</p>
+                <div class="text-center mb-3">
+                    <img src="Images/PaymentQR/gentrisbestqrforgcash.jpg" alt="GCash QR Code" class="img-fluid rounded"
+                        style="max-width:220px;border:2px solid #e0e0e0;padding:8px;"
+                        onerror="this.outerHTML='<div class=\'border rounded p-4 text-center text-muted\' style=\'max-width:220px;margin:auto;\'><i class=\'fa-solid fa-qrcode fa-4x mb-2\'></i><br><small>Place your GCash QR code image at<br><strong>Images/gcash_qr.png</strong></small></div>'">
+                </div>
+                <hr>
+                <p class="fw-medium mb-2 small"><i class="fa-solid fa-upload me-2 text-info"></i>Upload your payment screenshot:</p>
+                <input type="file" id="gcashScreenshotInput" accept="image/*" class="form-control mb-2">
+                <div id="gcashScreenshotPreview" style="display:none;" class="mb-3 text-center">
+                    <img id="gcashPreviewImg" src="" alt="Preview" class="img-fluid rounded" style="max-height:180px;border:1px solid #dee2e6;">
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" id="gcashOverlayCancel" class="btn btn-secondary flex-fill">Cancel</button>
+                    <button type="button" id="gcashOverlayConfirm" class="btn btn-info flex-fill" disabled>
+                        <i class="fa-solid fa-check me-1"></i>Confirm Payment
+                    </button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlayEl);
+    }
+
+    const gcashOverlay = document.getElementById('gcashQROverlay');
+
+    function openGcashOverlay() {
+        gcashOverlay.style.display = 'flex';
+        document.getElementById('gcashScreenshotInput').value = '';
+        document.getElementById('gcashScreenshotPreview').style.display = 'none';
+        document.getElementById('gcashOverlayConfirm').disabled = true;
+    }
+
+    function closeGcashOverlay() {
+        gcashOverlay.style.display = 'none';
+    }
+
+    document.getElementById('gcashOverlayClose').onclick = closeGcashOverlay;
+    document.getElementById('gcashOverlayCancel').onclick = closeGcashOverlay;
+
+    document.getElementById('gcashScreenshotInput').onchange = function () {
+        const file = this.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('gcashPreviewImg').src = e.target.result;
+            document.getElementById('gcashScreenshotPreview').style.display = 'block';
+            document.getElementById('gcashOverlayConfirm').disabled = false;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    document.getElementById('gcashOverlayConfirm').onclick = function () {
+        const file = document.getElementById('gcashScreenshotInput').files[0];
+        if (!file) return;
+        gcashScreenshotFile = file;
+        closeGcashOverlay();
+        const statusEl = document.getElementById('gcashProofStatus');
+        statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 d-flex align-items-center">
+            <i class="fa-solid fa-circle-check text-success me-2"></i>
+            <span class="flex-fill text-truncate">Screenshot attached: <strong>${file.name}</strong></span>
+            <button type="button" id="gcashProofRemoveBtn" class="btn btn-sm btn-outline-danger ms-2 py-0">Remove</button>
+        </div>`;
+        statusEl.style.display = 'block';
+        document.getElementById('gcashProofRemoveBtn').onclick = function () {
+            gcashScreenshotFile = null;
+            statusEl.style.display = 'none';
+        };
+    };
+
+    document.getElementById('paymentMethod').addEventListener('change', function () {
+        const gcashSection = document.getElementById('gcashPaySection');
+        if (this.value === 'GCASH') {
+            gcashSection.style.display = 'block';
+        } else {
+            gcashSection.style.display = 'none';
+            gcashScreenshotFile = null;
+            document.getElementById('gcashProofStatus').style.display = 'none';
+        }
+    });
+
+    document.getElementById('gcashPayBtn').addEventListener('click', openGcashOverlay);
 
     // ── helpers ──────────────────────────────────────────────
 
@@ -1323,13 +1429,17 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
             return showModal('Error', 'Please select a payment method', 'bg-warning',
                 [{text: 'Ok', class: 'btn btn-warning', dataDismiss: true}]);
         }
+        if (paymentMethod === 'GCASH' && !gcashScreenshotFile) {
+            return showModal('GCash Screenshot Required', 'Please click <strong>Pay with GCash</strong>, scan the QR code, then upload your transaction screenshot before placing the order.', 'bg-info text-white',
+                [{text: 'Ok', class: 'btn btn-info', dataDismiss: true}]);
+        }
 
         bootstrapModal.hide();
-        performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAddress, currentDeliveryFee);
+        performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAddress, currentDeliveryFee, gcashScreenshotFile);
     };
 }
 
-function performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAddress, deliveryFee) {
+function performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAddress, deliveryFee, gcashScreenshot) {
     const formData = new FormData();
     formData.append('action', 'place_order');
     formData.append('productId', productId);
@@ -1338,6 +1448,9 @@ function performPlaceOrder(productId, quantity, notes, paymentMethod, deliveryAd
     formData.append('paymentMethod', paymentMethod);
     formData.append('deliveryAddress', deliveryAddress || '');
     formData.append('deliveryFee', deliveryFee || 0);
+    if (gcashScreenshot) {
+        formData.append('gcashScreenshot', gcashScreenshot);
+    }
 
     fetch('customer_api.php', {
         method: 'POST',

@@ -117,7 +117,20 @@ if ($action === 'get_available_products') {
         $updateSql = "UPDATE Products SET Quantity = Quantity - ? WHERE ProductID = ?";
         $updateParams = array($quantity, $productId);
         sqlsrv_query($conn, $updateSql, $updateParams);
-        
+
+        // Save GCash screenshot if provided
+        if ($paymentMethod === 'GCASH' && isset($_FILES['gcashScreenshot']) && $_FILES['gcashScreenshot']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = 'uploads/gcash_proofs/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            $ext = strtolower(pathinfo($_FILES['gcashScreenshot']['name'], PATHINFO_EXTENSION));
+            $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            if (in_array($ext, $allowedExts)) {
+                move_uploaded_file($_FILES['gcashScreenshot']['tmp_name'], $uploadDir . $orderNumber . '.' . $ext);
+            }
+        }
+
         echo json_encode([
             'success' => true,
             'message' => 'Order placed successfully',
