@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenTri's Best | About Us</title>
+    <link rel="icon" type="image/png" href="Images/logo1.jpg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --sky-blue: #0ea5e9;
+            --sky-blue-hover: #0284c7;
+            --sky-blue-light: #e0f2fe;
+            --header-height: 72px;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: #f0f9ff;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            min-height: 100vh;
+            overflow-y: scroll;
+        }
+
+        /* Sticky header */
+        .page-header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: linear-gradient(135deg, var(--sky-blue) 0%, var(--sky-blue-hover) 100%);
+            color: white;
+            height: var(--header-height);
+            padding: 0 2rem;
+            box-shadow: 0 2px 8px rgba(14, 165, 233, 0.3);
+        }
+
+        /* Offset so sticky header doesn't cover section headings */
+        section[id] {
+            scroll-margin-top: calc(var(--header-height) + 1rem);
+        }
+
+        .bg-sky {
+            background-color: var(--sky-blue) !important;
+            color: white;
+        }
+
+        .text-sky {
+            color: var(--sky-blue) !important;
+        }
+
+        .btn-sky {
+            background-color: var(--sky-blue);
+            border-color: var(--sky-blue);
+            color: white;
+        }
+
+        .btn-sky:hover {
+            background-color: var(--sky-blue-hover);
+            border-color: var(--sky-blue-hover);
+            color: white;
+        }
+
+        .section-card {
+            border: none;
+            border-radius: 1rem;
+            box-shadow: 0 0.125rem 0.5rem rgba(14, 165, 233, 0.12);
+            transition: transform 0.2s, box-shadow 0.2s;
+            overflow: hidden;
+        }
+
+        .section-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 0.5rem 1.25rem rgba(14, 165, 233, 0.18);
+        }
+
+        .section-icon-wrap {
+            width: 60px;
+            height: 60px;
+            border-radius: 14px;
+            background-color: var(--sky-blue-light);
+            color: var(--sky-blue);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            flex-shrink: 0;
+        }
+
+        .section-header-bar {
+            height: 5px;
+        }
+
+        .translation-block {
+            background-color: var(--sky-blue-light);
+            border-left: 4px solid var(--sky-blue);
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .hero-banner {
+            background: linear-gradient(135deg, var(--sky-blue) 0%, var(--sky-blue-hover) 100%);
+            border-radius: 1rem;
+            padding: 3rem 2rem;
+            color: white;
+            box-shadow: 0 4px 20px rgba(14, 165, 233, 0.3);
+        }
+
+        .hero-banner .logo-circle {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.6);
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .nav-pill {
+            padding: 0.5rem 1.2rem;
+            border-radius: 2rem;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: all 0.2s;
+            color: var(--sky-blue);
+            border: 1.5px solid var(--sky-blue);
+        }
+
+        .nav-pill:hover,
+        .nav-pill.active {
+            background-color: var(--sky-blue);
+            color: white;
+        }
+
+        .nav-pill:active {
+            transform: scale(0.95);
+        }
+
+        /* Social media buttons */
+        .social-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: transform 0.2s, opacity 0.2s;
+            color: white;
+        }
+
+        .social-btn:hover {
+            transform: translateY(-3px);
+            opacity: 0.9;
+            color: white;
+        }
+
+        .social-facebook  { background-color: #1877f2; }
+        .social-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+        .social-tiktok    { background-color: #010101; }
+        .social-youtube   { background-color: #ff0000; }
+
+        .page-footer {
+            background-color: white;
+            border-top: 1px solid #e0f2fe;
+            box-shadow: 0 -2px 8px rgba(14, 165, 233, 0.06);
+        }
+
+        @media (max-width: 576px) {
+            .page-header {
+                padding: 0 1.25rem;
+            }
+
+            .hero-banner {
+                padding: 2rem 1.25rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Sticky Page Header -->
+    <header class="page-header d-flex align-items-center justify-content-between gap-3">
+        <div class="d-flex align-items-center gap-3">
+            <div style="width:44px;height:44px;border-radius:50%;overflow:hidden;border:2px solid rgba(255,255,255,0.7);flex-shrink:0;">
+                <img src="Images/logo1.jpg" alt="GenTri's Best" style="width:100%;height:100%;object-fit:cover;">
+            </div>
+            <div>
+                <h1 class="mb-0 fw-bold fs-5 lh-1">Dairy Box GenTri</h1>
+                <small class="opacity-75">Gen. Trias Dairy RMPC</small>
+            </div>
+        </div>
+        <a href="GenTrisBest_Dashboard.html"
+            class="btn btn-sm btn-light text-sky fw-semibold d-flex align-items-center gap-2 shadow-sm">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span class="d-none d-sm-inline">Back to Dashboard</span>
+        </a>
+    </header>
+
+    <main class="container py-4 px-3 px-md-4">
+
+        <!-- Hero Banner -->
+        <article class="hero-banner mb-4 d-flex flex-column flex-sm-row align-items-center gap-4 text-center text-sm-start">
+            <div class="logo-circle mx-auto mx-sm-0">
+                <img src="Images/logo1.jpg" alt="GenTri's Best Logo" style="width:100%;height:100%;object-fit:cover;">
+            </div>
+            <div>
+                <h2 class="fw-bold mb-1 fs-3">GenTri's Best</h2>
+                <p class="mb-2 opacity-90" style="font-size:0.95rem;">
+                    General Trias Dairy Raisers Multi-Purpose Cooperative
+                </p>
+                <span class="badge rounded-pill"
+                    style="background:rgba(255,255,255,0.2);font-size:0.8rem;padding:0.4em 0.9em;">
+                    <i class="fa-solid fa-award me-1"></i> Foodservice Distributor &mdash; Cavite Province
+                </span>
+            </div>
+        </article>
+
+        <!-- Quick-nav pills -->
+        <nav aria-label="Page sections" class="d-flex flex-wrap gap-2 mb-4">
+            <a href="#about-us"    class="nav-pill"><i class="fa-solid fa-circle-info me-1"></i>About Us</a>
+            <a href="#vision"      class="nav-pill"><i class="fa-solid fa-eye me-1"></i>Vision</a>
+            <a href="#mission"     class="nav-pill"><i class="fa-solid fa-bullseye me-1"></i>Mission</a>
+            <a href="#help-center" class="nav-pill"><i class="fa-solid fa-headset me-1"></i>Help Center</a>
+        </nav>
+
+        <div class="row g-4">
+
+            <!-- About Us -->
+            <section id="about-us" class="col-12">
+                <article class="section-card card h-100">
+                    <div class="section-header-bar bg-sky w-100"></div>
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-start gap-3 mb-3">
+                            <div class="section-icon-wrap">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </div>
+                            <div>
+                                <h2 class="fw-bold text-dark mb-0 fs-4">About Us</h2>
+                                <p class="text-muted mb-0" style="font-size:0.85rem;">Who we are</p>
+                            </div>
+                        </div>
+                        <p class="text-secondary lh-lg mb-0">
+                            The <strong>"One Town, One Product"</strong> initiative of the Department of Agriculture features
+                            the <strong>General Trias Dairy Raisers</strong> as its flagship project. While promoting the
+                            significance of agricultural development and adaptability, the organization asserts that farmers
+                            must be compensated fairly for their continuous efforts and, in turn, attain a better standard of
+                            living. In addition, they are the <strong>first cooperative of renown</strong> in the province of
+                            Cavite to manufacture goods from genuine buffalo milk.
+                        </p>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Vision -->
+            <section id="vision" class="col-12 col-md-6">
+                <article class="section-card card h-100">
+                    <div class="section-header-bar w-100"
+                        style="background:linear-gradient(90deg,#6366f1,#8b5cf6);"></div>
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-start gap-3 mb-3">
+                            <div class="section-icon-wrap" style="background-color:#ede9fe;color:#6366f1;">
+                                <i class="fa-solid fa-eye"></i>
+                            </div>
+                            <div>
+                                <h2 class="fw-bold text-dark mb-0 fs-4">Vision</h2>
+                                <p class="text-muted mb-0" style="font-size:0.85rem;">Aming Pananaw</p>
+                            </div>
+                        </div>
+                        <p class="lh-lg text-dark mb-3">
+                            Isang maunlad, malakas, at nagkakaisang kooperatiba na tutulong upang mapaunlad
+                            ang kalagayang pangkabuhayan ng mga kasapi at ng buong komunidad sa pangkalahatan.
+                        </p>
+                        <div class="translation-block p-3 rounded">
+                            <p class="mb-1 fw-semibold text-sky" style="font-size:0.8rem;">
+                                <i class="fa-solid fa-language me-1"></i> English Translation
+                            </p>
+                            <p class="text-secondary lh-lg mb-0" style="font-size:0.9rem;">
+                                A prosperous, strong, and united cooperative that will help improve the lives
+                                of the members and the entire community.
+                            </p>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <!-- Mission -->
+            <section id="mission" class="col-12 col-md-6">
+                <article class="section-card card h-100">
+                    <div class="section-header-bar w-100"
+                        style="background:linear-gradient(90deg,#f59e0b,#ef4444);"></div>
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-start gap-3 mb-3">
+                            <div class="section-icon-wrap" style="background-color:#fef3c7;color:#f59e0b;">
+                                <i class="fa-solid fa-bullseye"></i>
+                            </div>
+                            <div>
+                                <h2 class="fw-bold text-dark mb-0 fs-4">Mission</h2>
+                                <p class="text-muted mb-0" style="font-size:0.85rem;">Aming Misyon</p>
+                            </div>
+                        </div>
+                        <p class="lh-lg text-dark mb-3">
+                            Ang pinaninindigang kontribusyon ng Gen. Trias Dairy RMPC upang makamit ang pananaw
+                            na ito ay ang patuloy na pagpapalakas ng kasapian, pagpapaunlad ng kanilang kaalaman
+                            at kasanayan, pagsuporta sa pagtaas ng kita ng mga kasapi at pagbibigay ng serbisyo
+                            sa anyo ng puhunan, pagbebenta ng mga produkto, at pagproseso ng kanilang produkto.
+                        </p>
+                        <div class="translation-block p-3 rounded">
+                            <p class="mb-1 fw-semibold text-sky" style="font-size:0.8rem;">
+                                <i class="fa-solid fa-language me-1"></i> English Translation
+                            </p>
+                            <p class="text-secondary lh-lg mb-0" style="font-size:0.9rem;">
+                                The affirmed contribution of Gen. Trias Dairy RMPC to achieve this vision is to
+                                continue strengthening the membership, developing their knowledge and skills,
+                                supporting the increase in income of the members and providing services in the
+                                form of investment, selling products, and processing their product.
+                            </p>
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+        </div>
+
+        <!-- Help Center -->
+        <section id="help-center" class="mt-4">
+            <article class="section-card card">
+                <div class="section-header-bar w-100" style="background:linear-gradient(90deg,#0ea5e9,#06b6d4);"></div>
+                <div class="card-body p-4">
+
+                    <!-- Header -->
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <div class="section-icon-wrap" style="background-color:#e0f2fe;color:#0ea5e9;">
+                            <i class="fa-solid fa-headset"></i>
+                        </div>
+                        <div>
+                            <h2 class="fw-bold text-dark mb-1 fs-4">Something's wrong? We can help you.</h2>
+                            <p class="text-muted mb-0" style="font-size:0.9rem;">
+                                Experiencing an issue with your order or have a question about our products?
+                                Reach out to us directly — our team is ready to assist you as soon as possible.
+                            </p>
+                        </div>
+                    </div>
+
+                    <hr class="my-3" style="border-color:#e0f2fe;">
+
+                    <!-- Contact terminals -->
+                    <div class="row g-3">
+
+                        <div class="col-12 col-sm-6">
+                            <div class="d-flex align-items-center gap-3 p-3 rounded-3"
+                                style="background-color:#f0f9ff;border:1.5px solid #bae6fd;">
+                                <div style="width:44px;height:44px;border-radius:12px;background-color:#0ea5e9;color:white;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">
+                                    <i class="fa-solid fa-envelope"></i>
+                                </div>
+                                <div class="overflow-hidden">
+                                    <p class="mb-0 text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Email</p>
+                                    <a href="mailto:gentri.best@gmail.com"
+                                        class="text-sky fw-semibold text-decoration-none text-truncate d-block"
+                                        style="font-size:0.95rem;">
+                                        gentri.best@gmail.com
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-sm-6">
+                            <div class="d-flex align-items-center gap-3 p-3 rounded-3"
+                                style="background-color:#f0f9ff;border:1.5px solid #bae6fd;">
+                                <div style="width:44px;height:44px;border-radius:12px;background-color:#0ea5e9;color:white;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">
+                                    <i class="fa-solid fa-phone"></i>
+                                </div>
+                                <div>
+                                    <p class="mb-0 text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">Contact Number</p>
+                                    <a href="tel:+639XXXXXXXXX"
+                                        class="text-sky fw-semibold text-decoration-none d-block"
+                                        style="font-size:0.95rem;">
+                                        +63 9XX XXX XXXX
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </article>
+        </section>
+
+    </main>
+
+    <!-- Footer with social media links -->
+    <footer id="social" class="page-footer mt-5 py-4">
+        <div class="container px-3 px-md-4">
+            <div class="d-flex flex-column flex-sm-row align-items-center justify-content-between gap-3">
+
+                <!-- Brand -->
+                <div class="text-center text-sm-start">
+                    <p class="fw-semibold text-dark mb-0" style="font-size:0.9rem;">GenTri's Best</p>
+                    <p class="text-muted mb-0" style="font-size:0.78rem;">&copy; 2026 Gen. Trias Dairy RMPC. All rights reserved.</p>
+                </div>
+
+                <!-- Social icons -->
+                <div id="social-links" class="d-flex align-items-center gap-2">
+                    <a href="https://www.facebook.com/gentribest" target="_blank" rel="noopener"
+                        class="social-btn social-facebook" aria-label="Facebook" title="Facebook">
+                        <i class="fa-brands fa-facebook-f"></i>
+                    </a>
+                    <a href="https://www.instagram.com/gentribest" target="_blank" rel="noopener"
+                        class="social-btn social-instagram" aria-label="Instagram" title="Instagram">
+                        <i class="fa-brands fa-instagram"></i>
+                    </a>
+                    <a href="https://www.tiktok.com/@gentribest" target="_blank" rel="noopener"
+                        class="social-btn social-tiktok" aria-label="TikTok" title="TikTok">
+                        <i class="fa-brands fa-tiktok"></i>
+                    </a>
+                    <a href="https://www.youtube.com/@gentribest" target="_blank" rel="noopener"
+                        class="social-btn social-youtube" aria-label="YouTube" title="YouTube">
+                        <i class="fa-brands fa-youtube"></i>
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const sections = document.querySelectorAll('section[id], footer[id]');
+        const pills    = document.querySelectorAll('.nav-pill');
+
+        function setActive(id) {
+            pills.forEach(p => p.classList.remove('active'));
+            const match = document.querySelector(`.nav-pill[href="#${id}"]`);
+            if (match) match.classList.add('active');
+        }
+
+        // Click: set active immediately, then scroll
+        pills.forEach(pill => {
+            pill.addEventListener('click', e => {
+                e.preventDefault();
+                const targetId = pill.getAttribute('href').slice(1);
+                setActive(targetId);
+                const target = document.getElementById(targetId);
+                if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                history.replaceState(null, '', `#${targetId}`);
+            });
+        });
+
+        // Scroll: keep the pill in sync as the user scrolls manually
+        // Uses the topmost visible section as the active one
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActive(entry.target.id);
+                }
+            });
+        }, {
+            threshold: 0,
+            rootMargin: `-${getComputedStyle(document.documentElement).getPropertyValue('--header-height').trim()} 0px -60% 0px`
+        });
+
+        sections.forEach(s => observer.observe(s));
+
+        // Page load: scroll to hash from dashboard link
+        window.addEventListener('load', () => {
+            const hash = location.hash;
+            if (hash) {
+                const target = document.querySelector(hash);
+                if (target) {
+                    setTimeout(() => {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        setActive(hash.slice(1));
+                    }, 100);
+                }
+            }
+        });
+    </script>
+
+</body>
+
+</html>
