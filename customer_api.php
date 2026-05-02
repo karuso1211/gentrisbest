@@ -100,8 +100,13 @@ if ($action === 'get_available_products') {
         $priceType = 'WHOLESALE';
     }
     
-    // Generate order number
-    $orderNumber = 'ORD-' . date('Ymd') . '-' . uniqid();
+    // Use client-supplied order number (cart checkout shares one number) or generate new one
+    $clientOrderNumber = isset($_POST['orderNumber']) ? trim($_POST['orderNumber']) : null;
+    if ($clientOrderNumber && preg_match('/^ORD-\d{8}-.+$/', $clientOrderNumber) && strlen($clientOrderNumber) <= 60) {
+        $orderNumber = $clientOrderNumber;
+    } else {
+        $orderNumber = 'ORD-' . date('Ymd') . '-' . uniqid();
+    }
     
     // Calculate total price (product subtotal + delivery fee)
     $subtotal = $unitPrice * $quantity;
@@ -250,7 +255,7 @@ if ($action === 'get_available_products') {
     
 } elseif ($action === 'get_order_history') {
     // Fetch user's orders
-    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, Status, PaymentMethod
+    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, ShippedDate, DeliveryDate, Status, PaymentMethod
             FROM Orders
             WHERE Username = ?
             ORDER BY OrderDate DESC";
@@ -265,15 +270,20 @@ if ($action === 'get_available_products') {
     
     $orders = [];
     while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
-        // Format OrderDate to ISO 8601 string for JavaScript
         if ($row['OrderDate'] instanceof DateTime) {
             $row['OrderDate'] = $row['OrderDate']->format('Y-m-d H:i:s');
         }
+        if (isset($row['ShippedDate']) && $row['ShippedDate'] instanceof DateTime) {
+            $row['ShippedDate'] = $row['ShippedDate']->format('Y-m-d H:i:s');
+        }
+        if (isset($row['DeliveryDate']) && $row['DeliveryDate'] instanceof DateTime) {
+            $row['DeliveryDate'] = $row['DeliveryDate']->format('Y-m-d H:i:s');
+        }
         $orders[] = $row;
     }
-    
+
     echo json_encode(['success' => true, 'orders' => $orders]);
-    
+
 } elseif ($action === 'get_all_orders') {
     // Check if user has permission (ADMIN, INVENTORY, MANAGER, FRONT DESK)
     if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'INVENTORY', 'MANAGER', 'FRONT DESK'])) {
@@ -282,7 +292,7 @@ if ($action === 'get_available_products') {
     }
     
     // Fetch all orders with user information
-    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, Status, PaymentMethod,
+    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, ShippedDate, DeliveryDate, Status, PaymentMethod,
                    (SELECT CONCAT(FirstName, ' ', LastName) FROM Users WHERE Username = Orders.Username) AS UserFullName,
                    (SELECT ContactNumber FROM Users WHERE Username = Orders.Username) AS UserContactNumber
             FROM Orders
@@ -297,15 +307,20 @@ if ($action === 'get_available_products') {
     
     $orders = [];
     while ($row = sqlsrv_fetch_array($result, SQLSRV_FETCH_ASSOC)) {
-        // Format OrderDate to ISO 8601 string for JavaScript
         if ($row['OrderDate'] instanceof DateTime) {
             $row['OrderDate'] = $row['OrderDate']->format('Y-m-d H:i:s');
         }
+        if (isset($row['ShippedDate']) && $row['ShippedDate'] instanceof DateTime) {
+            $row['ShippedDate'] = $row['ShippedDate']->format('Y-m-d H:i:s');
+        }
+        if (isset($row['DeliveryDate']) && $row['DeliveryDate'] instanceof DateTime) {
+            $row['DeliveryDate'] = $row['DeliveryDate']->format('Y-m-d H:i:s');
+        }
         $orders[] = $row;
     }
-    
+
     echo json_encode(['success' => true, 'orders' => $orders]);
-    
+
 } elseif ($action === 'cancel_order') {
     // Cancel an order
     $orderId = isset($_POST['orderId']) ? intval($_POST['orderId']) : null;
@@ -384,10 +399,10 @@ if ($action === 'get_available_products') {
         exit();
     }
     
-    // Update order status to DELIVERED
-    $updateSql = "UPDATE Orders SET Status = 'DELIVERED' WHERE OrderID = ?";
+    // Update order status to DELIVERED and record delivery timestamp
+    $updateSql = "UPDATE Orders SET Status = 'DELIVERED', DeliveryDate = GETDATE() WHERE OrderID = ?";
     $updateParams = array($orderId);
-    
+
     if (sqlsrv_query($conn, $updateSql, $updateParams)) {
         echo json_encode(['success' => true, 'message' => 'Order marked as delivered successfully']);
     } else {
@@ -427,16 +442,29 @@ if ($action === 'get_available_products') {
         exit();
     }
     
-    // Allow managers to update PENDING orders to SHIPPED or DELIVERED
-    if ($order['Status'] !== 'PENDING') {
-        echo json_encode(['success' => false, 'error' => 'Only PENDING orders can be updated by managers']);
+    // Admins and managers can override any order status; others restricted to PENDING only
+    $isAdminOrManager = in_array($_SESSION['accountType'], ['ADMIN', 'MANAGER']);
+    if (!$isAdminOrManager && $order['Status'] !== 'PENDING') {
+        echo json_encode(['success' => false, 'error' => 'Only PENDING orders can be updated']);
+        exit();
+    }
+
+    // Order must be SHIPPED before it can be marked as DELIVERED
+    if ($newStatus === 'DELIVERED' && $order['Status'] !== 'SHIPPED') {
+        echo json_encode(['success' => false, 'error' => 'Order must be shipped before it can be marked as delivered']);
         exit();
     }
     
-    // Update order status
-    $updateSql = "UPDATE Orders SET Status = ? WHERE OrderID = ?";
+    // Update order status and record timestamp for SHIPPED/DELIVERED transitions
+    if ($newStatus === 'SHIPPED') {
+        $updateSql = "UPDATE Orders SET Status = ?, ShippedDate = GETDATE() WHERE OrderID = ?";
+    } elseif ($newStatus === 'DELIVERED') {
+        $updateSql = "UPDATE Orders SET Status = ?, DeliveryDate = GETDATE() WHERE OrderID = ?";
+    } else {
+        $updateSql = "UPDATE Orders SET Status = ? WHERE OrderID = ?";
+    }
     $updateParams = array($newStatus, $orderId);
-    
+
     if (sqlsrv_query($conn, $updateSql, $updateParams)) {
         $statusMessage = ($newStatus === 'SHIPPED') ? 'marked as shipped' : 'marked as delivered';
         echo json_encode(['success' => true, 'message' => 'Order ' . $statusMessage . ' successfully']);

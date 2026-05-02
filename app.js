@@ -296,7 +296,8 @@ function displayUserData(userData) {
     const inventoryTab = document.getElementById('inventoryNavItem');
     const adminTab = document.getElementById('adminNavItem');
     const posTab = document.getElementById('posNavItem');
-    
+    const cartNavItem = document.getElementById('cartNavItem');
+
     if (isGuest) {
         // Hide all restricted tabs for guests
         if (reportsNavItem) reportsNavItem.style.display = 'none';
@@ -304,6 +305,7 @@ function displayUserData(userData) {
         if (inventoryTab) inventoryTab.style.display = 'none';
         if (adminTab) adminTab.style.display = 'none';
         if (posTab) posTab.style.display = 'none';
+        if (cartNavItem) cartNavItem.style.display = 'none';
     } else {
         // Show tabs for authenticated users based on their role
         // Reports tab is visible only to ADMIN, INVENTORY, MANAGER
@@ -332,6 +334,13 @@ function displayUserData(userData) {
             if (posTab) posTab.style.display = 'block';
         } else {
             if (posTab) posTab.style.display = 'none';
+        }
+
+        // Show Cart tab only for regular users (USER role)
+        if (userData.accountType === 'USER') {
+            if (cartNavItem) cartNavItem.style.display = 'block';
+        } else {
+            if (cartNavItem) cartNavItem.style.display = 'none';
         }
     }
     
@@ -898,8 +907,8 @@ function displayBrowseProducts(products) {
                                 '<button class="btn btn-secondary w-100" disabled><i class="fa-solid fa-times me-2"></i>Out of Stock</button>' :
                                 isGuest ?
                                 '<button class="btn btn-outline-sky w-100" disabled title="Please login to order"><i class="fa-solid fa-lock me-2"></i>Login to Order</button>' :
-                                `<button class="btn btn-sky w-100 btn-order-fixed" onclick="showOrderModal(${product.ProductID}, '${product.ProductName}', ${product.Price}, ${product.WholesalePrice || 'null'})">
-                                    <i class="fa-solid fa-shopping-cart me-2"></i>Order Now
+                                `<button class="btn btn-sky w-100 btn-order-fixed" onclick="showAddToCartModal(${product.ProductID})">
+                                    <i class="fa-solid fa-cart-plus me-2"></i>Add to Cart
                                 </button>`
                             }
                         </div>
@@ -1546,11 +1555,876 @@ function setupBrowseSearchListener() {
 }
 
 // ============================================
+// USER CART FUNCTIONS
+// ============================================
+
+function showAddToCartModal(productId) {
+    const product = allBrowseProducts.find(p => parseInt(p.ProductID) === parseInt(productId));
+    if (!product) return;
+
+    const regularPrice = parseFloat(product.Price);
+    const wholesale = product.WholesalePrice && parseFloat(product.WholesalePrice) > 0
+        ? parseFloat(product.WholesalePrice) : null;
+    const maxQty = parseInt(product.Quantity);
+
+    // Pre-fill with existing cart quantity if already added
+    const existingItem = userCart.find(i => parseInt(i.productId) === parseInt(productId));
+    const startQty = existingItem ? existingItem.quantity : 1;
+
+    const modal = document.getElementById('adminModal');
+    const modalDialog = document.getElementById('adminModalDialog');
+    const modalHeader = document.getElementById('modalHeader');
+    const modalTitle = document.getElementById('adminModalLabel');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+
+    modalDialog.className = 'modal-dialog modal-dialog-centered';
+    modalHeader.className = 'modal-header bg-sky text-white';
+    modalTitle.textContent = 'Add to Cart';
+
+    modalBody.innerHTML = `
+        <div class="mb-3">
+            <h6 class="fw-bold mb-1">${product.ProductName}</h6>
+            <p class="text-muted small mb-0">${product.Description || ''}</p>
+        </div>
+
+        <div id="atcPriceInfo" class="mb-3"></div>
+
+        <div class="mb-3">
+            <label class="form-label fw-medium">Quantity <span class="text-muted small">(${maxQty} in stock)</span></label>
+            <div class="input-group">
+                <button class="btn btn-outline-secondary" type="button" id="atcQtyMinus">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+                <input type="number" class="form-control text-center" id="atcQty"
+                    min="1" max="${maxQty}" value="${startQty}">
+                <button class="btn btn-outline-secondary" type="button" id="atcQtyPlus">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+            </div>
+        </div>
+
+        <div id="atcTotalDisplay" class="alert alert-info py-2 mb-0"></div>
+    `;
+
+    modalFooter.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sky fw-medium" id="atcConfirmBtn">
+            <i class="fa-solid fa-cart-plus me-1"></i>Add to Cart
+        </button>`;
+
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+
+    modal.addEventListener('hidden.bs.modal', () => {
+        modalDialog.className = 'modal-dialog modal-dialog-centered';
+    }, { once: true });
+
+    function getPrice(qty) {
+        return (qty >= 10 && wholesale) ? wholesale : regularPrice;
+    }
+
+    function renderAtcInfo() {
+        const qty = parseInt(document.getElementById('atcQty').value) || 1;
+        const unitPrice = getPrice(qty);
+        const subtotal = unitPrice * qty;
+
+        let priceHTML = '';
+        if (wholesale) {
+            if (qty >= 10) {
+                const savings = (regularPrice - wholesale) * qty;
+                priceHTML = `
+                    <div class="border rounded p-2 bg-success bg-opacity-10 mb-2">
+                        <div class="text-muted small"><del>Regular: ₱${regularPrice.toFixed(2)}/unit</del></div>
+                        <div class="text-success fw-bold">Wholesale: ₱${wholesale.toFixed(2)}/unit</div>
+                        <span class="badge bg-success mt-1">
+                            <i class="fa-solid fa-tag me-1"></i>You save ₱${savings.toFixed(2)}!
+                        </span>
+                    </div>`;
+            } else {
+                const needed = 10 - qty;
+                priceHTML = `
+                    <div class="border rounded p-2 mb-2">
+                        <div class="fw-bold">₱${regularPrice.toFixed(2)}/unit</div>
+                        <div class="text-info small mt-1">
+                            <i class="fa-solid fa-lightbulb me-1"></i>
+                            Add <strong>${needed}</strong> more unit${needed !== 1 ? 's' : ''} to unlock
+                            wholesale price (₱${wholesale.toFixed(2)}/unit)
+                        </div>
+                        <div class="progress mt-2" style="height:6px;">
+                            <div class="progress-bar bg-info" style="width:${Math.min(qty / 10 * 100, 100)}%"></div>
+                        </div>
+                        <div class="text-muted" style="font-size:0.72rem;">${qty}/10 units</div>
+                    </div>`;
+            }
+        } else {
+            priceHTML = `<div class="fw-bold mb-2">₱${regularPrice.toFixed(2)}/unit</div>`;
+        }
+
+        document.getElementById('atcPriceInfo').innerHTML = priceHTML;
+        document.getElementById('atcTotalDisplay').innerHTML =
+            `<div class="d-flex justify-content-between">
+                <span>Subtotal (${qty} unit${qty !== 1 ? 's' : ''})</span>
+                <strong>₱${subtotal.toFixed(2)}</strong>
+            </div>`;
+    }
+
+    renderAtcInfo();
+
+    document.getElementById('atcQty').addEventListener('input', renderAtcInfo);
+
+    document.getElementById('atcQtyMinus').addEventListener('click', () => {
+        const input = document.getElementById('atcQty');
+        const val = Math.max(1, (parseInt(input.value) || 1) - 1);
+        input.value = val;
+        renderAtcInfo();
+    });
+
+    document.getElementById('atcQtyPlus').addEventListener('click', () => {
+        const input = document.getElementById('atcQty');
+        const val = Math.min(maxQty, (parseInt(input.value) || 1) + 1);
+        input.value = val;
+        renderAtcInfo();
+    });
+
+    document.getElementById('atcConfirmBtn').onclick = function () {
+        const qty = parseInt(document.getElementById('atcQty').value) || 0;
+        if (qty <= 0) return;
+        if (qty > maxQty) {
+            document.getElementById('atcQty').value = maxQty;
+            return;
+        }
+        bootstrapModal.hide();
+        addToUserCart(parseInt(productId), product.ProductName, regularPrice, wholesale, qty);
+    };
+}
+
+function addToUserCart(productId, productName, regularPrice, wholesalePrice, quantity) {
+    quantity = parseInt(quantity) || 1;
+    const unitPrice = (quantity >= 10 && wholesalePrice) ? wholesalePrice : regularPrice;
+    const priceType = (quantity >= 10 && wholesalePrice) ? 'WHOLESALE' : 'REGULAR';
+
+    const existing = userCart.findIndex(item => parseInt(item.productId) === parseInt(productId));
+    if (existing >= 0) {
+        userCart[existing].quantity = quantity;
+        userCart[existing].unitPrice = unitPrice;
+        userCart[existing].priceType = priceType;
+        userCart[existing].itemTotal = unitPrice * quantity;
+    } else {
+        userCart.push({
+            productId: productId,
+            productName: productName,
+            quantity: quantity,
+            regularPrice: regularPrice,
+            wholesalePrice: wholesalePrice || null,
+            unitPrice: unitPrice,
+            priceType: priceType,
+            itemTotal: unitPrice * quantity
+        });
+    }
+    updateCartBadge();
+    showCartToast(productName);
+}
+
+function showCartToast(productName) {
+    const existing = document.getElementById('cartToast');
+    if (existing) existing.remove();
+    const toast = document.createElement('div');
+    toast.id = 'cartToast';
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;min-width:260px;';
+    toast.innerHTML = `
+        <div class="alert alert-success d-flex align-items-center shadow mb-0 py-2">
+            <i class="fa-solid fa-cart-plus me-2"></i>
+            <span><strong>${productName}</strong> added to cart!</span>
+        </div>`;
+    document.body.appendChild(toast);
+    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 2500);
+}
+
+function updateCartBadge() {
+    const badge = document.getElementById('cartBadge');
+    if (!badge) return;
+    const total = userCart.reduce((sum, item) => sum + item.quantity, 0);
+    if (total > 0) {
+        badge.textContent = total > 99 ? '99+' : total;
+        badge.style.display = 'inline-block';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+function loadUserCart() {
+    displayUserCart();
+}
+
+function displayUserCart() {
+    const container = document.getElementById('cartSectionContainer');
+    if (!container) return;
+
+    if (userCart.length === 0) {
+        container.innerHTML = `
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-sky text-white">
+                    <h5 class="mb-0"><i class="fa-solid fa-cart-shopping me-2"></i>My Cart</h5>
+                </div>
+                <div class="card-body text-center py-5 text-muted">
+                    <i class="fa-solid fa-cart-shopping fa-3x mb-3 opacity-25"></i>
+                    <p class="mb-3">Your cart is empty</p>
+                    <a href="#" onclick="showSection('products'); loadBrowseProducts()" class="btn btn-sky">
+                        <i class="fa-solid fa-store me-2"></i>Browse Products
+                    </a>
+                </div>
+            </div>`;
+        return;
+    }
+
+    let cartSubtotal = 0;
+    let totalUnits = 0;
+    userCart.forEach(item => { cartSubtotal += item.itemTotal; totalUnits += item.quantity; });
+
+    let rowsHTML = '';
+    userCart.forEach((item, index) => {
+        const priceLabel = item.priceType === 'WHOLESALE'
+            ? '<span class="badge bg-success ms-1 align-middle">Wholesale</span>'
+            : '';
+        const wholesaleHint = item.wholesalePrice && item.priceType !== 'WHOLESALE'
+            ? `<div class="text-info" style="font-size:0.75rem;"><i class="fa-solid fa-lightbulb me-1"></i>Buy ${10 - item.quantity} more for wholesale pricing</div>`
+            : '';
+        rowsHTML += `
+            <tr>
+                <td>
+                    <div class="fw-bold">${item.productName}${priceLabel}</div>
+                    <div class="text-muted small">₱${item.unitPrice.toFixed(2)}/unit</div>
+                    ${wholesaleHint}
+                </td>
+                <td class="text-center" style="width:150px;">
+                    <div class="input-group input-group-sm justify-content-center">
+                        <button class="btn btn-outline-secondary" type="button"
+                            onclick="updateUserCartItemQuantity(${index}, ${item.quantity - 1})">
+                            <i class="fa-solid fa-minus"></i>
+                        </button>
+                        <input type="number" class="form-control text-center border-secondary" value="${item.quantity}" min="1"
+                            style="max-width:50px;"
+                            onchange="updateUserCartItemQuantity(${index}, parseInt(this.value)||1)">
+                        <button class="btn btn-outline-secondary" type="button"
+                            onclick="updateUserCartItemQuantity(${index}, ${item.quantity + 1})">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </td>
+                <td class="text-end fw-bold">₱${item.itemTotal.toFixed(2)}</td>
+                <td class="text-center">
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeUserCartItem(${index})" title="Remove">
+                        <i class="fa-solid fa-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+    });
+
+    container.innerHTML = `
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-sky text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fa-solid fa-cart-shopping me-2"></i>My Cart</h5>
+                <span class="badge bg-light text-sky">${userCart.length} product(s)</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Product</th>
+                                <th class="text-center">Quantity</th>
+                                <th class="text-end">Subtotal</th>
+                                <th class="text-center">Remove</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHTML}</tbody>
+                    </table>
+                </div>
+                <div class="border-top pt-3 mt-2">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="text-muted mb-0">${totalUnits} unit(s) across ${userCart.length} product(s)</p>
+                        <h5 class="mb-0 text-sky fw-bold">Items Total: ₱${cartSubtotal.toFixed(2)}</h5>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-danger" onclick="clearUserCart()">
+                            <i class="fa-solid fa-trash me-1"></i>Clear Cart
+                        </button>
+                        <button class="btn btn-sky flex-fill fw-medium" onclick="checkoutUserCart()">
+                            <i class="fa-solid fa-bag-shopping me-2"></i>Proceed to Checkout
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+function updateUserCartItemQuantity(index, qty) {
+    qty = parseInt(qty) || 1;
+    if (qty <= 0) { removeUserCartItem(index); return; }
+    const item = userCart[index];
+    item.quantity = qty;
+    if (qty >= 10 && item.wholesalePrice) {
+        item.unitPrice = item.wholesalePrice;
+        item.priceType = 'WHOLESALE';
+    } else {
+        item.unitPrice = item.regularPrice;
+        item.priceType = 'REGULAR';
+    }
+    item.itemTotal = item.unitPrice * qty;
+    updateCartBadge();
+    displayUserCart();
+}
+
+function removeUserCartItem(index) {
+    userCart.splice(index, 1);
+    updateCartBadge();
+    displayUserCart();
+}
+
+function clearUserCart() {
+    showModal(
+        'Clear Cart',
+        '<p class="mb-0">Are you sure you want to remove all items from your cart?</p>',
+        'bg-warning',
+        [
+            { text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Clear Cart', class: 'btn btn-danger', onclick: () => {
+                const m = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (m) m.hide();
+                userCart = [];
+                updateCartBadge();
+                displayUserCart();
+            }}
+        ]
+    );
+}
+
+function checkoutUserCart() {
+    if (userCart.length === 0) {
+        showModal('Empty Cart', '<p class="mb-0">Your cart is empty.</p>', 'bg-warning',
+            [{ text: 'Ok', class: 'btn btn-warning', dataDismiss: true }]);
+        return;
+    }
+
+    const modal = document.getElementById('adminModal');
+    const modalDialog = document.getElementById('adminModalDialog');
+    const modalHeader = document.getElementById('modalHeader');
+    const modalTitle = document.getElementById('adminModalLabel');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+
+    modalDialog.className = 'modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable';
+    modalHeader.className = 'modal-header bg-sky text-white';
+    modalTitle.textContent = 'Checkout';
+
+    let cartSubtotal = 0;
+    userCart.forEach(item => cartSubtotal += item.itemTotal);
+
+    let itemsSummaryHTML = '';
+    userCart.forEach(item => {
+        const label = item.priceType === 'WHOLESALE' ? ' <span class="badge bg-success">Wholesale</span>' : '';
+        itemsSummaryHTML += `
+            <div class="d-flex justify-content-between small mb-1">
+                <span>${item.productName} x${item.quantity}${label}</span>
+                <span>₱${item.itemTotal.toFixed(2)}</span>
+            </div>`;
+    });
+
+    modalBody.innerHTML = `
+        <div class="mb-3">
+            <h6 class="fw-bold mb-2"><i class="fa-solid fa-receipt me-2 text-sky"></i>Order Summary</h6>
+            <div class="border rounded p-3 bg-light">
+                ${itemsSummaryHTML}
+                <hr class="my-2">
+                <div class="d-flex justify-content-between fw-bold">
+                    <span>Items Subtotal</span>
+                    <span>₱${cartSubtotal.toFixed(2)}</span>
+                </div>
+            </div>
+        </div>
+
+        <hr class="my-3">
+        <h6 class="fw-semibold mb-2"><i class="fa-solid fa-truck me-2 text-sky"></i>Delivery Details</h6>
+
+        <div class="mb-2">
+            <label class="form-label fw-medium">Delivery Address <span class="text-danger">*</span></label>
+            <div class="input-group">
+                <input type="text" class="form-control" id="cartDeliveryAddress"
+                    placeholder="Type address or use map / GPS below" autocomplete="off">
+                <span class="input-group-text bg-white" id="cartGeocodeStatus">
+                    <i class="fa-solid fa-location-dot text-muted"></i>
+                </span>
+            </div>
+            <small id="cartGeocodeHint" class="text-muted">Type your address, or use the buttons below to set your location.</small>
+        </div>
+
+        <div class="d-flex gap-2 mb-3">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="cartToggleMapBtn">
+                <i class="fa-solid fa-map-location-dot me-1"></i>Pin on Map
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="cartUseGpsBtn">
+                <i class="fa-solid fa-crosshairs me-1"></i>Use My Location
+            </button>
+        </div>
+
+        <div id="cartMapPickerSection" style="display:none;" class="mb-3">
+            <div id="cartDeliveryMap" style="height:280px; border-radius:8px; border:1px solid #dee2e6; z-index:0;"></div>
+            <small class="text-muted mt-1 d-block">
+                <i class="fa-solid fa-hand-pointer me-1"></i>Click the map or drag the
+                <span style="color:#e74c3c;">&#x25CF;</span> pin to set your delivery location.
+                <span style="color:#0ea5e9;">&#x25CF;</span> = store.
+            </small>
+        </div>
+
+        <div id="cartDeliveryFeeBreakdown" class="alert alert-secondary py-2 mb-3" style="display:none;">
+            <div class="d-flex justify-content-between small mb-1 text-muted">
+                <span><i class="fa-solid fa-route me-1"></i>Estimated road distance</span>
+                <span id="cartBreakdownDistance">—</span>
+            </div>
+            <div class="d-flex justify-content-between small mb-1">
+                <span>Items Subtotal</span>
+                <span>₱<span id="cartBreakdownSubtotal">${cartSubtotal.toFixed(2)}</span></span>
+            </div>
+            <div class="d-flex justify-content-between small mb-1">
+                <span><i class="fa-solid fa-motorcycle me-1 text-sky"></i>Delivery Fee (Lalamove)</span>
+                <span>₱<span id="cartBreakdownDelivery">0.00</span></span>
+            </div>
+            <hr class="my-1">
+            <div class="d-flex justify-content-between fw-bold">
+                <span>Grand Total</span>
+                <span class="text-sky">₱<span id="cartBreakdownGrandTotal">${cartSubtotal.toFixed(2)}</span></span>
+            </div>
+            <div class="mt-2 small text-muted">
+                <i class="fa-solid fa-circle-info me-1"></i>
+                Rate: ₱${LALAMOVE_BASE_FARE} base (first ${LALAMOVE_BASE_KM} km) + ₱${LALAMOVE_PER_KM}/km after
+            </div>
+        </div>
+
+        <hr class="my-3">
+
+        <div class="mb-3">
+            <label class="form-label fw-medium">Payment Method <span class="text-danger">*</span></label>
+            <select class="form-select" id="cartPaymentMethod">
+                <option value="" disabled selected>Select payment method...</option>
+                <option value="Cash On Delivery">Cash On Delivery (COD)</option>
+                <option value="GCASH">GCash</option>
+                <option value="Card">Card</option>
+            </select>
+        </div>
+
+        <div id="cartGcashPaySection" class="mb-3" style="display:none;">
+            <button type="button" class="btn btn-info w-100" id="cartGcashPayBtn">
+                <i class="fa-solid fa-mobile-screen me-2"></i>Pay with GCash
+            </button>
+            <div id="cartGcashProofStatus" class="mt-2 small" style="display:none;"></div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-medium">Order Notes (Optional)</label>
+            <textarea class="form-control" id="cartOrderNotes" rows="2"
+                placeholder="Special instructions for your order..."></textarea>
+        </div>
+    `;
+
+    modalFooter.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sky fw-medium" id="confirmCartCheckoutBtn">
+            <i class="fa-solid fa-bag-shopping me-1"></i>Place Order
+        </button>`;
+
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+
+    modal.addEventListener('hidden.bs.modal', () => {
+        modalDialog.className = 'modal-dialog modal-dialog-centered';
+    }, { once: true });
+
+    let currentDeliveryFee = null;
+    let currentDeliveryKm = null;
+    let geocodeTimer = null;
+    let deliveryMap = null;
+    let deliveryMarker = null;
+    let mapInitialized = false;
+    let gcashScreenshotFile = null;
+
+    // GCash overlay (reuse existing or create)
+    if (!document.getElementById('gcashQROverlay')) {
+        const overlayEl = document.createElement('div');
+        overlayEl.id = 'gcashQROverlay';
+        overlayEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1200;align-items:center;justify-content:center;';
+        overlayEl.innerHTML = `
+            <div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:420px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.35);">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="rounded-circle d-flex align-items-center justify-content-center me-2" style="width:38px;height:38px;background:#0070e0;flex-shrink:0;">
+                        <i class="fa-solid fa-mobile-screen text-white"></i>
+                    </div>
+                    <h5 class="mb-0 fw-bold">Pay with GCash</h5>
+                    <button type="button" id="gcashOverlayClose" class="btn-close ms-auto"></button>
+                </div>
+                <p class="text-muted small mb-3">Scan the QR code below using your GCash app, then upload your transaction screenshot to confirm payment.</p>
+                <div class="text-center mb-3">
+                    <img src="Images/PaymentQR/gentrisbestqrforgcash.jpg" alt="GCash QR Code" class="img-fluid rounded"
+                        style="max-width:220px;border:2px solid #e0e0e0;padding:8px;"
+                        onerror="this.outerHTML='<div class=\'border rounded p-4 text-center text-muted\' style=\'max-width:220px;margin:auto;\'><i class=\'fa-solid fa-qrcode fa-4x mb-2\'></i><br><small>QR not found</small></div>'">
+                </div>
+                <hr>
+                <p class="fw-medium mb-2 small"><i class="fa-solid fa-upload me-2 text-info"></i>Upload your payment screenshot:</p>
+                <input type="file" id="gcashScreenshotInput" accept="image/*" class="form-control mb-2">
+                <div id="gcashScreenshotPreview" style="display:none;" class="mb-3 text-center">
+                    <img id="gcashPreviewImg" src="" alt="Preview" class="img-fluid rounded" style="max-height:180px;border:1px solid #dee2e6;">
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <button type="button" id="gcashOverlayCancel" class="btn btn-secondary flex-fill">Cancel</button>
+                    <button type="button" id="gcashOverlayConfirm" class="btn btn-info flex-fill" disabled>
+                        <i class="fa-solid fa-check me-1"></i>Confirm Payment
+                    </button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlayEl);
+    }
+
+    const gcashOverlay = document.getElementById('gcashQROverlay');
+
+    function openGcashOverlayCart() {
+        gcashOverlay.style.display = 'flex';
+        document.getElementById('gcashScreenshotInput').value = '';
+        document.getElementById('gcashScreenshotPreview').style.display = 'none';
+        document.getElementById('gcashOverlayConfirm').disabled = true;
+    }
+
+    document.getElementById('gcashOverlayClose').onclick = () => { gcashOverlay.style.display = 'none'; };
+    document.getElementById('gcashOverlayCancel').onclick = () => { gcashOverlay.style.display = 'none'; };
+
+    document.getElementById('gcashScreenshotInput').onchange = function () {
+        const file = this.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            document.getElementById('gcashPreviewImg').src = e.target.result;
+            document.getElementById('gcashScreenshotPreview').style.display = 'block';
+            document.getElementById('gcashOverlayConfirm').disabled = false;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    document.getElementById('gcashOverlayConfirm').onclick = function () {
+        const file = document.getElementById('gcashScreenshotInput').files[0];
+        if (!file) return;
+        gcashScreenshotFile = file;
+        gcashOverlay.style.display = 'none';
+        const statusEl = document.getElementById('cartGcashProofStatus');
+        statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 d-flex align-items-center">
+            <i class="fa-solid fa-circle-check text-success me-2"></i>
+            <span class="flex-fill text-truncate">Screenshot attached: <strong>${file.name}</strong></span>
+            <button type="button" id="cartGcashProofRemoveBtn" class="btn btn-sm btn-outline-danger ms-2 py-0">Remove</button>
+        </div>`;
+        statusEl.style.display = 'block';
+        document.getElementById('cartGcashProofRemoveBtn').onclick = function () {
+            gcashScreenshotFile = null;
+            statusEl.style.display = 'none';
+        };
+    };
+
+    document.getElementById('cartPaymentMethod').addEventListener('change', function () {
+        const sec = document.getElementById('cartGcashPaySection');
+        if (this.value === 'GCASH') {
+            sec.style.display = 'block';
+        } else {
+            sec.style.display = 'none';
+            gcashScreenshotFile = null;
+            document.getElementById('cartGcashProofStatus').style.display = 'none';
+        }
+    });
+
+    document.getElementById('cartGcashPayBtn').addEventListener('click', openGcashOverlayCart);
+
+    // Delivery fee helpers
+    function setCartGeoStatus(state) {
+        const icon = document.querySelector('#cartGeocodeStatus i');
+        const hint = document.getElementById('cartGeocodeHint');
+        const map = {
+            loading: ['fa-solid fa-spinner fa-spin text-secondary', '<span class="text-secondary">Locating address…</span>'],
+            ok:      ['fa-solid fa-circle-check text-success',       '<span class="text-success">Location found — fee calculated below.</span>'],
+            error:   ['fa-solid fa-circle-xmark text-danger',        '<span class="text-danger">Address not found. Try a more specific address or use the map.</span>'],
+            idle:    ['fa-solid fa-location-dot text-muted',         'Type your address, or use the buttons below to set your location.']
+        };
+        const [cls, msg] = map[state] || map.idle;
+        icon.className = cls;
+        hint.innerHTML = msg;
+    }
+
+    function applyCartCoords(lat, lng) {
+        const straightKm = haversineKm(STORE_LAT, STORE_LNG, lat, lng);
+        currentDeliveryKm = straightKm * ROAD_FACTOR;
+        currentDeliveryFee = calcLalamoveFee(currentDeliveryKm);
+        renderCartBreakdown();
+    }
+
+    function renderCartBreakdown() {
+        const bd = document.getElementById('cartDeliveryFeeBreakdown');
+        if (currentDeliveryFee === null) { bd.style.display = 'none'; return; }
+        const grand = cartSubtotal + currentDeliveryFee;
+        bd.style.display = 'block';
+        document.getElementById('cartBreakdownDistance').textContent = `~${currentDeliveryKm.toFixed(1)} km`;
+        document.getElementById('cartBreakdownDelivery').textContent = currentDeliveryFee.toFixed(2);
+        document.getElementById('cartBreakdownGrandTotal').textContent = grand.toFixed(2);
+    }
+
+    function initCartLeafletMap() {
+        if (mapInitialized) { deliveryMap.invalidateSize(); return; }
+        mapInitialized = true;
+
+        deliveryMap = L.map('cartDeliveryMap', { zoomControl: true }).setView([STORE_LAT, STORE_LNG], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(deliveryMap);
+
+        const storeIcon = L.divIcon({
+            html: `<div style="background:#0ea5e9;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.4);"></div>`,
+            className: '', iconAnchor: [7, 7]
+        });
+        L.marker([STORE_LAT, STORE_LNG], { icon: storeIcon, interactive: false })
+            .addTo(deliveryMap).bindTooltip("GenTri's Best Store");
+
+        const deliveryIcon = L.divIcon({
+            html: `<div style="background:#e74c3c;width:16px;height:16px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;box-shadow:0 0 4px rgba(0,0,0,.4);"></div>`,
+            className: '', iconAnchor: [8, 16]
+        });
+        deliveryMarker = L.marker([STORE_LAT, STORE_LNG], { icon: deliveryIcon, draggable: true, opacity: 0 })
+            .addTo(deliveryMap).bindTooltip('Your delivery location');
+
+        deliveryMarker.on('dragend', async () => {
+            const { lat, lng } = deliveryMarker.getLatLng();
+            await onCartPinSet(lat, lng);
+        });
+
+        deliveryMap.on('click', async (e) => {
+            deliveryMarker.setLatLng(e.latlng);
+            deliveryMarker.setOpacity(1);
+            await onCartPinSet(e.latlng.lat, e.latlng.lng);
+        });
+    }
+
+    async function onCartPinSet(lat, lng) {
+        applyCartCoords(lat, lng);
+        setCartGeoStatus('loading');
+        try {
+            const res = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+                { headers: { 'Accept': 'application/json' } }
+            );
+            const data = await res.json();
+            if (data && data.display_name) {
+                document.getElementById('cartDeliveryAddress').value = data.display_name;
+                setCartGeoStatus('ok');
+                return;
+            }
+        } catch (_) {}
+        document.getElementById('cartDeliveryAddress').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setCartGeoStatus('ok');
+    }
+
+    function placeCartMarkerAt(lat, lng) {
+        if (!mapInitialized) return;
+        deliveryMarker.setLatLng([lat, lng]);
+        deliveryMarker.setOpacity(1);
+        deliveryMap.setView([lat, lng], 16);
+    }
+
+    document.getElementById('cartToggleMapBtn').addEventListener('click', () => {
+        const section = document.getElementById('cartMapPickerSection');
+        const btn = document.getElementById('cartToggleMapBtn');
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+            btn.innerHTML = '<i class="fa-solid fa-map-location-dot me-1"></i>Hide Map';
+            btn.classList.replace('btn-outline-primary', 'btn-primary');
+            setTimeout(initCartLeafletMap, 50);
+        } else {
+            section.style.display = 'none';
+            btn.innerHTML = '<i class="fa-solid fa-map-location-dot me-1"></i>Pin on Map';
+            btn.classList.replace('btn-primary', 'btn-outline-primary');
+        }
+    });
+
+    document.getElementById('cartUseGpsBtn').addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            setCartGeoStatus('error');
+            return;
+        }
+        const btn = document.getElementById('cartUseGpsBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Getting location…';
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const { latitude, longitude } = pos.coords;
+                const section = document.getElementById('cartMapPickerSection');
+                if (section.style.display === 'none') {
+                    document.getElementById('cartToggleMapBtn').click();
+                }
+                setTimeout(async () => {
+                    placeCartMarkerAt(latitude, longitude);
+                    await onCartPinSet(latitude, longitude);
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-crosshairs me-1"></i>Use My Location';
+                }, 150);
+            },
+            () => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-crosshairs me-1"></i>Use My Location';
+                setCartGeoStatus('error');
+            }
+        );
+    });
+
+    document.getElementById('cartDeliveryAddress').addEventListener('input', () => {
+        clearTimeout(geocodeTimer);
+        const addr = document.getElementById('cartDeliveryAddress').value.trim();
+        if (addr.length < 8) {
+            currentDeliveryFee = null;
+            currentDeliveryKm = null;
+            setCartGeoStatus('idle');
+            renderCartBreakdown();
+            return;
+        }
+        setCartGeoStatus('loading');
+        geocodeTimer = setTimeout(async () => {
+            const result = await geocodeAddress(addr);
+            if (!result) {
+                currentDeliveryFee = null;
+                currentDeliveryKm = null;
+                setCartGeoStatus('error');
+                renderCartBreakdown();
+                return;
+            }
+            applyCartCoords(result.lat, result.lng);
+            setCartGeoStatus('ok');
+            if (mapInitialized) placeCartMarkerAt(result.lat, result.lng);
+        }, 900);
+    });
+
+    document.getElementById('confirmCartCheckoutBtn').onclick = function () {
+        const deliveryAddress = document.getElementById('cartDeliveryAddress').value.trim();
+        const paymentMethod = document.getElementById('cartPaymentMethod').value;
+        const notes = document.getElementById('cartOrderNotes').value;
+
+        if (!deliveryAddress) {
+            return showModal('Missing Address', 'Please enter your delivery address or pin your location on the map.', 'bg-warning',
+                [{ text: 'Ok', class: 'btn btn-warning', dataDismiss: true }]);
+        }
+        if (currentDeliveryFee === null) {
+            return showModal('Address Not Located', 'Delivery fee is still being calculated. Please wait or check your address.', 'bg-warning',
+                [{ text: 'Ok', class: 'btn btn-warning', dataDismiss: true }]);
+        }
+        if (!paymentMethod) {
+            return showModal('Missing Payment', 'Please select a payment method.', 'bg-warning',
+                [{ text: 'Ok', class: 'btn btn-warning', dataDismiss: true }]);
+        }
+        if (paymentMethod === 'GCASH' && !gcashScreenshotFile) {
+            return showModal('GCash Screenshot Required',
+                'Please click <strong>Pay with GCash</strong>, scan the QR code, then upload your screenshot before placing the order.',
+                'bg-info text-white',
+                [{ text: 'Ok', class: 'btn btn-info', dataDismiss: true }]);
+        }
+
+        bootstrapModal.hide();
+        processUserCartCheckout(deliveryAddress, currentDeliveryFee, paymentMethod, notes, gcashScreenshotFile);
+    };
+}
+
+function processUserCartCheckout(deliveryAddress, deliveryFee, paymentMethod, notes, gcashScreenshot) {
+    const cartItems = [...userCart];
+    userCart = [];
+    updateCartBadge();
+    displayUserCart();
+
+    // ONE order number shared by every item in this cart checkout
+    const orderNumber = 'ORD-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).substr(2, 9);
+
+    let processed = 0;
+    let failed = 0;
+    const failedItems = [];
+
+    const processNextItem = (index) => {
+        if (index >= cartItems.length) {
+            if (failed === 0) {
+                let itemRows = cartItems.map(i =>
+                    `<tr><td>${i.productName}</td><td class="text-center">${i.quantity}</td><td class="text-end">₱${i.itemTotal.toFixed(2)}</td></tr>`
+                ).join('');
+                const grandTotal = cartItems.reduce((s, i) => s + i.itemTotal, 0) + deliveryFee;
+                showModal(
+                    'Order Placed!',
+                    `<p class="mb-3"><i class="fa-solid fa-check-circle text-success me-2"></i><strong>Your order has been placed successfully!</strong></p>
+                    <p class="mb-2"><strong>Order #:</strong> <span class="text-sky fw-bold">${orderNumber}</span></p>
+                    <div class="table-responsive mb-2">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light"><tr><th>Product</th><th class="text-center">Qty</th><th class="text-end">Subtotal</th></tr></thead>
+                            <tbody>${itemRows}</tbody>
+                            <tfoot>
+                                <tr class="table-light"><td colspan="2" class="text-muted"><i class="fa-solid fa-motorcycle me-1"></i>Delivery Fee</td><td class="text-end">₱${deliveryFee.toFixed(2)}</td></tr>
+                                <tr class="fw-bold"><td colspan="2">Grand Total</td><td class="text-end text-success">₱${grandTotal.toFixed(2)}</td></tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    <p class="mb-1 small"><i class="fa-solid fa-location-dot me-1 text-danger"></i>${deliveryAddress}</p>
+                    <p class="mb-0 small"><i class="fa-solid fa-credit-card me-1"></i>${paymentMethod}</p>`,
+                    'bg-success',
+                    [{ text: 'View Orders', class: 'btn btn-success', dataDismiss: true, onclick: () => {
+                        setTimeout(() => { showSection('analytics'); loadOrderHistory(); }, 300);
+                    }}]
+                );
+            } else {
+                let msg = `<p>Processed: <strong class="text-success">${processed}</strong> | Failed: <strong class="text-danger">${failed}</strong></p>`;
+                if (failedItems.length > 0) {
+                    msg += `<ul class="small">` + failedItems.map(fi => `<li><strong>${fi.name}</strong>: ${fi.error}</li>`).join('') + `</ul>`;
+                }
+                showModal('Order Summary', msg, failed === cartItems.length ? 'bg-danger' : 'bg-warning',
+                    [{ text: 'Ok', class: failed === cartItems.length ? 'btn btn-danger' : 'btn btn-warning', dataDismiss: true, onclick: () => {
+                        setTimeout(() => { showSection('analytics'); loadOrderHistory(); }, 300);
+                    }}]
+                );
+            }
+            return;
+        }
+
+        const item = cartItems[index];
+        const formData = new FormData();
+        formData.append('action', 'place_order');
+        formData.append('orderNumber', orderNumber);   // shared number for all items
+        formData.append('productId', item.productId);
+        formData.append('quantity', item.quantity);
+        formData.append('paymentMethod', paymentMethod);
+        formData.append('deliveryAddress', deliveryAddress);
+        formData.append('deliveryFee', index === 0 ? deliveryFee : 0);  // fee only on first row
+        formData.append('notes', notes || '');
+        if (index === 0 && gcashScreenshot) {
+            formData.append('gcashScreenshot', gcashScreenshot);
+        }
+
+        fetch('customer_api.php', { method: 'POST', body: formData })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) processed++;
+                else { failed++; failedItems.push({ name: item.productName, error: data.error || 'Unknown error' }); }
+                processNextItem(index + 1);
+            })
+            .catch(err => {
+                failed++;
+                failedItems.push({ name: item.productName, error: err.message });
+                processNextItem(index + 1);
+            });
+    };
+
+    processNextItem(0);
+}
+
+// ============================================
 // POS FUNCTIONS - POINT OF SALE FOR WALK-IN CUSTOMERS
 // ============================================
 let allPOSProducts = [];
 let posProductsFiltered = [];
 let posCart = []; // Shopping cart for POS items
+let userCart = []; // Shopping cart for regular users
 
 function loadPOSProducts() {
     // Load products for POS
@@ -2300,48 +3174,39 @@ function filterOrderHistory() {
 }
 
 function groupPOSOrders(orders) {
+    return groupOrders(orders); // alias kept for compatibility
+}
+
+function groupOrders(orders) {
     const grouped = [];
-    const posOrderMap = {}; // Map to track POS orders by OrderNumber
-    
+    const orderMap = {};
+
     orders.forEach(order => {
         const isPOS = order.Username === 'WALKIN_CUSTOMER';
-        
-        if (isPOS) {
-            // Group POS orders by OrderNumber
-            if (!posOrderMap[order.OrderNumber]) {
-                // Create a grouped POS order
-                posOrderMap[order.OrderNumber] = {
-                    ...order,
-                    isPOS: true,
-                    items: [order]
-                };
-                grouped.push(posOrderMap[order.OrderNumber]);
-            } else {
-                // Add item to existing POS order group
-                posOrderMap[order.OrderNumber].items.push(order);
-            }
-        } else {
-            // Regular orders are not grouped
-            grouped.push({
+        if (!orderMap[order.OrderNumber]) {
+            orderMap[order.OrderNumber] = {
                 ...order,
-                isPOS: false,
+                isPOS: isPOS,
                 items: [order]
-            });
+            };
+            grouped.push(orderMap[order.OrderNumber]);
+        } else {
+            orderMap[order.OrderNumber].items.push(order);
         }
     });
-    
+
     return grouped;
 }
 
 function renderOrderRows(groupedOrders, isAdmin) {
     const tableBody = document.getElementById('orderHistoryTableBody');
-    
+
     groupedOrders.forEach(groupedOrder => {
-        // For POS orders, create a single row with all items
         if (groupedOrder.isPOS) {
             renderPOSOrderRow(groupedOrder, tableBody, isAdmin);
+        } else if (groupedOrder.items.length > 1) {
+            renderGroupedCartOrderRow(groupedOrder, tableBody, isAdmin);
         } else {
-            // Regular orders - render normally
             renderRegularOrderRow(groupedOrder.items[0], tableBody, isAdmin);
         }
     });
@@ -2373,8 +3238,6 @@ function renderRegularOrderRow(order, tableBody, isAdmin) {
                     <i class="fa-solid fa-times me-1"></i>Cancel</button>
                 <button class="btn btn-sm btn-primary" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'SHIPPED')">
                     <i class="fa-solid fa-truck me-1"></i>Ship</button>
-                <button class="btn btn-sm btn-success" onclick="showUpdateStatusModal(${order.OrderID}, '${order.OrderNumber}', 'DELIVERED')">
-                    <i class="fa-solid fa-box-open me-1"></i>Deliver</button>
             </div>`;
         } else if (order.Status === 'SHIPPED') {
             actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
@@ -2492,6 +3355,393 @@ function renderPOSOrderRow(groupedOrder, tableBody, isAdmin) {
     
     row.innerHTML = rowContent;
     tableBody.appendChild(row);
+}
+
+function renderGroupedCartOrderRow(groupedOrder, tableBody, isAdmin) {
+    const row = document.createElement('tr');
+    const orderDate = new Date(groupedOrder.OrderDate);
+    const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+    const items = groupedOrder.items;
+    const allStatuses = items.map(i => i.Status);
+    const uniqueStatuses = [...new Set(allStatuses)];
+    // Representative status: if all same use it, else show lowest in workflow
+    const workflowOrder = ['PENDING', 'CONFIRMED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+    const repStatus = uniqueStatuses.length === 1
+        ? uniqueStatuses[0]
+        : workflowOrder.find(s => allStatuses.includes(s)) || allStatuses[0];
+
+    const statusBadge = `<span class="badge ${
+        repStatus === 'PENDING'   ? 'bg-warning'  :
+        repStatus === 'CONFIRMED' ? 'bg-info'      :
+        repStatus === 'SHIPPED'   ? 'bg-primary'   :
+        repStatus === 'CANCELLED' ? 'bg-danger'    : 'bg-success'
+    }">${repStatus}${uniqueStatuses.length > 1 ? ' *' : ''}</span>`;
+
+    const productList = items.map(i => i.ProductName).join(', ');
+    const totalQty    = items.reduce((s, i) => s + parseInt(i.Quantity), 0);
+    const grandTotal  = items.reduce((s, i) => s + parseFloat(i.TotalPrice), 0);
+    const encoded     = btoa(JSON.stringify(groupedOrder));
+    const orderIds    = items.map(i => i.OrderID);
+    const allPending  = allStatuses.every(s => s === 'PENDING');
+    const allShipped  = allStatuses.every(s => s === 'SHIPPED');
+
+    let actionBtn;
+    if (isAdmin) {
+        actionBtn = `<div class="d-flex gap-1 justify-content-center flex-wrap">
+            <button class="btn btn-sm btn-info" onclick="showCartOrderReceiptModal('${encoded}')">
+                <i class="fa-solid fa-eye me-1"></i>View</button>
+            ${allPending || allShipped ? `<button class="btn btn-sm btn-danger" onclick="cancelGroupedOrder([${orderIds.join(',')}], '${groupedOrder.OrderNumber}')">
+                <i class="fa-solid fa-times me-1"></i>Cancel</button>` : ''}
+            ${allPending ? `<button class="btn btn-sm btn-primary" onclick="shipGroupedOrder([${orderIds.join(',')}], '${groupedOrder.OrderNumber}')">
+                <i class="fa-solid fa-truck me-1"></i>Ship</button>` : ''}
+            ${allShipped ? `<button class="btn btn-sm btn-success" onclick="deliverGroupedOrder([${orderIds.join(',')}], '${groupedOrder.OrderNumber}')">
+                <i class="fa-solid fa-box-open me-1"></i>Deliver</button>` : ''}
+        </div>`;
+    } else {
+        actionBtn = `<div class="d-flex gap-1 justify-content-center flex-wrap">
+            <button class="btn btn-sm btn-info" onclick="showCartOrderReceiptModal('${encoded}')">
+                <i class="fa-solid fa-eye me-1"></i>Receipt</button>
+            ${allPending ? `<button class="btn btn-sm btn-danger" onclick="cancelGroupedOrder([${orderIds.join(',')}], '${groupedOrder.OrderNumber}')">
+                <i class="fa-solid fa-times me-1"></i>Cancel</button>` : ''}
+            ${allShipped ? `<button class="btn btn-sm btn-success" onclick="confirmGroupedDelivery([${orderIds.join(',')}], '${groupedOrder.OrderNumber}')">
+                <i class="fa-solid fa-box-open me-1"></i>Confirm</button>` : ''}
+        </div>`;
+    }
+
+    let rowContent = `<td><strong>${groupedOrder.OrderNumber}</strong><br><span class="badge bg-secondary" style="font-size:0.65rem;">${items.length} items</span></td>`;
+    if (isAdmin) {
+        const name  = groupedOrder.UserFullName || groupedOrder.Username || 'Unknown';
+        const phone = groupedOrder.UserContactNumber
+            ? `<div class="text-muted small"><i class="fa-solid fa-phone me-1"></i>${groupedOrder.UserContactNumber}</div>` : '';
+        rowContent += `<td><div class="fw-medium">${name}</div>${phone}</td>`;
+    }
+    rowContent += `
+        <td><small>${productList}</small></td>
+        <td>${totalQty}</td>
+        <td><div class="text-muted small">Total:</div><strong>₱${grandTotal.toFixed(2)}</strong></td>
+        <td>${formattedDate}</td>
+        <td>${statusBadge}</td>
+        <td>${actionBtn}</td>`;
+
+    row.innerHTML = rowContent;
+    tableBody.appendChild(row);
+}
+
+function showCartOrderReceiptModal(encodedGroupedOrder) {
+    const groupedOrder = JSON.parse(atob(encodedGroupedOrder));
+    const items = groupedOrder.items;
+
+    const modal = document.getElementById('adminModal');
+    const modalDialog = document.getElementById('adminModalDialog');
+    const modalHeader = document.getElementById('modalHeader');
+    const modalTitle = document.getElementById('adminModalLabel');
+    const modalBody = document.getElementById('modalBody');
+    const modalFooter = document.getElementById('modalFooter');
+
+    modalDialog.className = 'modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable';
+    modalHeader.className = 'modal-header bg-sky text-white';
+    modalTitle.textContent = `Order Receipt — ${groupedOrder.OrderNumber}`;
+
+    const orderDate = new Date(groupedOrder.OrderDate);
+    const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedTime = orderDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+    const shippedDateRaw = items.find(i => i.ShippedDate)?.ShippedDate || null;
+    const deliveryDateRaw = items.find(i => i.DeliveryDate)?.DeliveryDate || null;
+    const formatDT = d => { const dt = new Date(d); return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); };
+
+    const deliveryFee = items.reduce((s, i) => s + (parseFloat(i.DeliveryFee) || 0), 0);
+    const itemsSubtotal = items.reduce((s, i) => s + parseFloat(i.TotalPrice), 0) - deliveryFee;
+    const grandTotal = itemsSubtotal + deliveryFee;
+
+    const paymentMethod = items[0].PaymentMethod || 'Cash On Delivery';
+    const deliveryAddress = items.find(i => i.DeliveryAddress)?.DeliveryAddress || '';
+    const notes = items.find(i => i.Notes)?.Notes || '';
+    const allStatuses = [...new Set(items.map(i => i.Status))];
+    const repStatus = allStatuses.length === 1 ? allStatuses[0] : 'MIXED';
+
+    const paymentIcon = paymentMethod === 'GCASH' ? '<i class="fa-solid fa-mobile text-info me-1"></i>'
+        : paymentMethod === 'Card' ? '<i class="fa-solid fa-credit-card text-warning me-1"></i>'
+        : '<i class="fa-solid fa-money-bill text-success me-1"></i>';
+
+    const statusColor = repStatus === 'PENDING' ? 'bg-warning' : repStatus === 'CONFIRMED' ? 'bg-info'
+        : repStatus === 'SHIPPED' ? 'bg-primary' : repStatus === 'CANCELLED' ? 'bg-danger'
+        : repStatus === 'MIXED' ? 'bg-secondary' : 'bg-success';
+
+    let itemRows = items.map(item => {
+        const unitPrice = parseFloat(item.UnitPrice);
+        const qty = parseInt(item.Quantity);
+        const subtotal = parseFloat(item.TotalPrice) - (parseFloat(item.DeliveryFee) || 0);
+        const wholesaleBadge = (unitPrice * qty < parseFloat(item.TotalPrice) - (parseFloat(item.DeliveryFee) || 0) + 0.01)
+            ? '' : '';
+        const itemStatusBadge = allStatuses.length > 1
+            ? `<span class="badge ${item.Status === 'PENDING' ? 'bg-warning' : item.Status === 'SHIPPED' ? 'bg-primary' : 'bg-success'} ms-1" style="font-size:0.65rem;">${item.Status}</span>`
+            : '';
+        return `<tr>
+            <td>${item.ProductName}${itemStatusBadge}</td>
+            <td class="text-center">${qty}</td>
+            <td class="text-end">₱${unitPrice.toFixed(2)}</td>
+            <td class="text-end">₱${subtotal.toFixed(2)}</td>
+        </tr>`;
+    }).join('');
+
+    const customerSection = groupedOrder.UserFullName ? `
+        <div class="row mb-3 pb-3 border-bottom">
+            <div class="col-md-4"><label class="fw-bold text-muted small">Customer</label><p class="mb-0">${groupedOrder.UserFullName}</p></div>
+            <div class="col-md-4"><label class="fw-bold text-muted small">Username</label><p class="mb-0">${groupedOrder.Username}</p></div>
+            <div class="col-md-4"><label class="fw-bold text-muted small">Phone</label><p class="mb-0">${groupedOrder.UserContactNumber || '—'}</p></div>
+        </div>` : '';
+
+    modalBody.innerHTML = `
+        <div class="row mb-3 pb-3 border-bottom">
+            <div class="col-md-6">
+                <label class="fw-bold text-muted small">Order Number</label>
+                <p class="mb-1 fw-bold text-sky">${groupedOrder.OrderNumber}</p>
+                <label class="fw-bold text-muted small">Date & Time</label>
+                <p class="mb-0">${formattedDate} at ${formattedTime}</p>
+            </div>
+            <div class="col-md-6">
+                <label class="fw-bold text-muted small">Status</label>
+                <p class="mb-1"><span class="badge ${statusColor}">${repStatus}</span></p>
+                <label class="fw-bold text-muted small">Payment</label>
+                <p class="mb-0">${paymentIcon}${paymentMethod}</p>
+            </div>
+        </div>
+        <div class="mb-3 pb-3 border-bottom">
+            <label class="fw-bold text-muted small"><i class="fa-solid fa-clock-rotate-left me-1"></i>Order Timeline</label>
+            <div class="mt-2 d-flex flex-column gap-1" style="font-size:0.875rem;">
+                <div><i class="fa-solid fa-circle-check text-warning me-2"></i><strong>Order Placed:</strong> ${formattedDate} at ${formattedTime}</div>
+                <div><i class="fa-solid fa-truck${shippedDateRaw ? ' text-primary' : ' text-muted'} me-2"></i><strong>Shipped:</strong> ${shippedDateRaw ? formatDT(shippedDateRaw) : '<span class="text-muted">Not yet shipped</span>'}</div>
+                <div><i class="fa-solid fa-box-open${deliveryDateRaw ? ' text-success' : ' text-muted'} me-2"></i><strong>Delivered:</strong> ${deliveryDateRaw ? formatDT(deliveryDateRaw) : '<span class="text-muted">Not yet delivered</span>'}</div>
+            </div>
+        </div>
+        ${customerSection}
+        <div class="mb-3 pb-3 border-bottom">
+            <label class="fw-bold text-muted small">Ordered Items</label>
+            <div class="table-responsive mt-2">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr><th>Product</th><th class="text-center">Qty</th><th class="text-end">Unit Price</th><th class="text-end">Subtotal</th></tr>
+                    </thead>
+                    <tbody>${itemRows}</tbody>
+                    <tfoot>
+                        <tr class="table-light">
+                            <td colspan="3" class="text-muted"><i class="fa-solid fa-motorcycle me-1"></i>Delivery Fee</td>
+                            <td class="text-end">₱${deliveryFee.toFixed(2)}</td>
+                        </tr>
+                        <tr class="fw-bold">
+                            <td colspan="3">Grand Total</td>
+                            <td class="text-end text-success fs-5">₱${grandTotal.toFixed(2)}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+        ${deliveryAddress ? `
+        <div class="mb-3 pb-3 border-bottom">
+            <label class="fw-bold text-muted small"><i class="fa-solid fa-location-dot me-1 text-danger"></i>Delivery Address</label>
+            <p class="mb-0 mt-1">${deliveryAddress}</p>
+        </div>` : ''}
+        ${notes ? `
+        <div class="mb-2">
+            <label class="fw-bold text-muted small">Notes</label>
+            <div class="alert alert-light border p-2 mb-0"><p class="mb-0 small">${notes}</p></div>
+        </div>` : ''}
+    `;
+
+    modalFooter.innerHTML = `
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary" onclick="printCartOrderReceipt('${encodedGroupedOrder}')">
+            <i class="fa-solid fa-print me-1"></i>Print Receipt
+        </button>`;
+
+    modal.addEventListener('hidden.bs.modal', () => {
+        modalDialog.className = 'modal-dialog modal-dialog-centered';
+    }, { once: true });
+
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+}
+
+function printCartOrderReceipt(encodedGroupedOrder) {
+    const groupedOrder = JSON.parse(atob(encodedGroupedOrder));
+    const items = groupedOrder.items;
+    const deliveryFee = items.reduce((s, i) => s + (parseFloat(i.DeliveryFee) || 0), 0);
+    const grandTotal = items.reduce((s, i) => s + parseFloat(i.TotalPrice), 0);
+    const orderDate = new Date(groupedOrder.OrderDate);
+    const deliveryAddress = items.find(i => i.DeliveryAddress)?.DeliveryAddress || '';
+    const paymentMethod = items[0].PaymentMethod || '';
+    const shippedDateRaw2 = items.find(i => i.ShippedDate)?.ShippedDate || null;
+    const deliveryDateRaw2 = items.find(i => i.DeliveryDate)?.DeliveryDate || null;
+    const fmtDT2 = d => new Date(d).toLocaleString('en-US');
+
+    let itemRows = items.map(i => `
+        <tr>
+            <td style="padding:4px 8px;">${i.ProductName}</td>
+            <td style="padding:4px 8px;text-align:center;">${i.Quantity}</td>
+            <td style="padding:4px 8px;text-align:right;">₱${parseFloat(i.UnitPrice).toFixed(2)}</td>
+            <td style="padding:4px 8px;text-align:right;">₱${(parseFloat(i.TotalPrice) - (parseFloat(i.DeliveryFee)||0)).toFixed(2)}</td>
+        </tr>`).join('');
+
+    const html = `<!DOCTYPE html><html><head><title>Order Receipt ${groupedOrder.OrderNumber}</title>
+        <style>body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;color:#333;}
+        h2{color:#0ea5e9;}table{width:100%;border-collapse:collapse;margin:12px 0;}
+        th,td{border:1px solid #ddd;padding:6px 8px;}th{background:#f0f9ff;}
+        .total{font-weight:bold;background:#f0f9ff;}.footer{margin-top:20px;color:#888;font-size:0.85em;}</style>
+        </head><body>
+        <h2>GenTri's Best — Order Receipt</h2>
+        <p><strong>Order #:</strong> ${groupedOrder.OrderNumber}<br>
+        <strong>Date:</strong> ${orderDate.toLocaleString('en-US')}<br>
+        <strong>Payment:</strong> ${paymentMethod}</p>
+        <table style="width:100%;border-collapse:collapse;margin:8px 0 12px;"><thead><tr><th style="background:#f0f9ff;padding:6px 8px;border:1px solid #ddd;text-align:left;">Milestone</th><th style="background:#f0f9ff;padding:6px 8px;border:1px solid #ddd;text-align:left;">Date & Time</th></tr></thead><tbody>
+        <tr><td style="padding:5px 8px;border:1px solid #ddd;">📋 Order Placed</td><td style="padding:5px 8px;border:1px solid #ddd;">${orderDate.toLocaleString('en-US')}</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid #ddd;">🚚 Shipped</td><td style="padding:5px 8px;border:1px solid #ddd;color:${shippedDateRaw2 ? '#004085' : '#999'};">${shippedDateRaw2 ? fmtDT2(shippedDateRaw2) : 'Not yet shipped'}</td></tr>
+        <tr><td style="padding:5px 8px;border:1px solid #ddd;">📦 Delivered</td><td style="padding:5px 8px;border:1px solid #ddd;color:${deliveryDateRaw2 ? '#155724' : '#999'};">${deliveryDateRaw2 ? fmtDT2(deliveryDateRaw2) : 'Not yet delivered'}</td></tr>
+        </tbody></table>
+        <table><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead>
+        <tbody>${itemRows}
+        <tr><td colspan="3" style="text-align:right;color:#666;">Delivery Fee</td><td style="text-align:right;">₱${deliveryFee.toFixed(2)}</td></tr>
+        <tr class="total"><td colspan="3" style="text-align:right;">Grand Total</td><td style="text-align:right;color:#16a34a;">₱${grandTotal.toFixed(2)}</td></tr>
+        </tbody></table>
+        ${deliveryAddress ? `<p><strong>Deliver to:</strong> ${deliveryAddress}</p>` : ''}
+        <div class="footer">Thank you for shopping at GenTri's Best!</div>
+        </body></html>`;
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.onload = () => w.print();
+}
+
+function cancelGroupedOrder(orderIds, orderNumber) {
+    showModal(
+        'Cancel Order',
+        `<p class="mb-2"><strong>Cancel the entire order <span class="text-sky">${orderNumber}</span>?</strong></p>
+        <div class="alert alert-warning mb-0">This will cancel all ${orderIds.length} item(s) and restore stock.</div>`,
+        'bg-warning',
+        [
+            { text: 'Keep Order', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Cancel Order', class: 'btn btn-danger', onclick: () => {
+                const m = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (m) m.hide();
+                let done = 0;
+                const cancelNext = (index) => {
+                    if (index >= orderIds.length) {
+                        showModal('Order Cancelled', `<p class="mb-0">Order <strong>${orderNumber}</strong> has been cancelled and stock restored.</p>`, 'bg-success',
+                            [{ text: 'Ok', class: 'btn btn-success', dataDismiss: true, onclick: () => setTimeout(loadOrderHistory, 300) }]);
+                        return;
+                    }
+                    const fd = new FormData();
+                    fd.append('action', 'cancel_order');
+                    fd.append('orderId', orderIds[index]);
+                    fetch('customer_api.php', { method: 'POST', body: fd })
+                        .then(r => r.json())
+                        .then(() => { done++; cancelNext(index + 1); })
+                        .catch(() => cancelNext(index + 1));
+                };
+                cancelNext(0);
+            }}
+        ]
+    );
+}
+
+function shipGroupedOrder(orderIds, orderNumber) {
+    showModal(
+        'Ship Order',
+        `<p class="mb-0">Mark order <strong>${orderNumber}</strong> as shipped?</p>`,
+        'bg-primary',
+        [
+            { text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Mark as Shipped', class: 'btn btn-primary', onclick: () => {
+                const m = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (m) m.hide();
+                const shipNext = (index) => {
+                    if (index >= orderIds.length) {
+                        showModal('Shipped', `<p class="mb-0">Order <strong>${orderNumber}</strong> marked as shipped!</p>`, 'bg-success',
+                            [{ text: 'Ok', class: 'btn btn-success', dataDismiss: true, onclick: () => setTimeout(loadOrderHistory, 300) }]);
+                        return;
+                    }
+                    const fd = new FormData();
+                    fd.append('action', 'update_order_status');
+                    fd.append('orderId', orderIds[index]);
+                    fd.append('status', 'SHIPPED');
+                    fetch('customer_api.php', { method: 'POST', body: fd })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!data.success) console.error('Ship failed:', data.error);
+                            shipNext(index + 1);
+                        })
+                        .catch(() => shipNext(index + 1));
+                };
+                shipNext(0);
+            }}
+        ]
+    );
+}
+
+function deliverGroupedOrder(orderIds, orderNumber) {
+    showModal(
+        'Mark as Delivered',
+        `<p class="mb-0">Mark order <strong>${orderNumber}</strong> as delivered?</p>`,
+        'bg-success',
+        [
+            { text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Mark as Delivered', class: 'btn btn-success', onclick: () => {
+                const m = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (m) m.hide();
+                const deliverNext = (index) => {
+                    if (index >= orderIds.length) {
+                        showModal('Delivered', `<p class="mb-0">Order <strong>${orderNumber}</strong> marked as delivered!</p>`, 'bg-success',
+                            [{ text: 'Ok', class: 'btn btn-success', dataDismiss: true, onclick: () => setTimeout(loadOrderHistory, 300) }]);
+                        return;
+                    }
+                    const fd = new FormData();
+                    fd.append('action', 'update_order_status');
+                    fd.append('orderId', orderIds[index]);
+                    fd.append('status', 'DELIVERED');
+                    fetch('customer_api.php', { method: 'POST', body: fd })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (!data.success) console.error('Deliver failed:', data.error);
+                            deliverNext(index + 1);
+                        })
+                        .catch(() => deliverNext(index + 1));
+                };
+                deliverNext(0);
+            }}
+        ]
+    );
+}
+
+function confirmGroupedDelivery(orderIds, orderNumber) {
+    showModal(
+        'Confirm Delivery',
+        `<p class="mb-0">Confirm delivery for order <strong>${orderNumber}</strong>?</p>`,
+        'bg-success',
+        [
+            { text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Confirm Delivery', class: 'btn btn-success', onclick: () => {
+                const m = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+                if (m) m.hide();
+                const confirmNext = (index) => {
+                    if (index >= orderIds.length) {
+                        showModal('Delivered', `<p class="mb-0">Order <strong>${orderNumber}</strong> marked as delivered!</p>`, 'bg-success',
+                            [{ text: 'Ok', class: 'btn btn-success', dataDismiss: true, onclick: () => setTimeout(loadOrderHistory, 300) }]);
+                        return;
+                    }
+                    const fd = new FormData();
+                    fd.append('action', 'confirm_delivery');
+                    fd.append('orderId', orderIds[index]);
+                    fetch('customer_api.php', { method: 'POST', body: fd })
+                        .then(r => r.json())
+                        .then(() => confirmNext(index + 1))
+                        .catch(() => confirmNext(index + 1));
+                };
+                confirmNext(0);
+            }}
+        ]
+    );
 }
 
 function showOrderDetailsModal(encodedOrder) {
@@ -2884,6 +4134,7 @@ function printOrderReceipt(encodedOrder) {
     const orderDate = new Date(order.OrderDate);
     const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const formattedTime = orderDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const fmtDT = d => { const dt = new Date(d); return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); };
     
     // Get payment method display
     let paymentMethodDisplay = order.PaymentMethod || 'Cash On Delivery';
@@ -3117,11 +4368,28 @@ function printOrderReceipt(encodedOrder) {
                     <div class="receipt-row">
                         <span class="label">Status:</span>
                         <span class="value"><span class="badge status-badge badge-${
-                            order.Status === 'PENDING' ? 'warning' : 
-                            order.Status === 'CONFIRMED' ? 'info' : 
-                            order.Status === 'SHIPPED' ? 'primary' : 
+                            order.Status === 'PENDING' ? 'warning' :
+                            order.Status === 'CONFIRMED' ? 'info' :
+                            order.Status === 'SHIPPED' ? 'primary' :
                             'success'
                         }">${order.Status}</span></span>
+                    </div>
+                </div>
+
+                <!-- Order Timeline -->
+                <div class="receipt-section">
+                    <div class="section-title">Order Timeline</div>
+                    <div class="receipt-row">
+                        <span class="label">📋 Order Placed:</span>
+                        <span class="value">${formattedDate} at ${formattedTime}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="label">🚚 Shipped by Manager:</span>
+                        <span class="value" style="color:${order.ShippedDate ? '#004085' : '#999'};">${order.ShippedDate ? fmtDT(order.ShippedDate) : 'Not yet shipped'}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="label">📦 Delivered:</span>
+                        <span class="value" style="color:${order.DeliveryDate ? '#155724' : '#999'};">${order.DeliveryDate ? fmtDT(order.DeliveryDate) : 'Not yet delivered'}</span>
                     </div>
                 </div>
                 
@@ -3475,18 +4743,18 @@ function showSection(sectionId) {
     sections.forEach(section => {
         section.style.display = 'none';
     });
-    
+
     // Update nav links
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    
+
     // Show selected section
     const selectedSection = document.getElementById(sectionId + 'Section');
     if (selectedSection) {
         selectedSection.style.display = 'block';
     }
-    
+
     // Mark corresponding nav link as active
     const navLinks = document.querySelectorAll('.nav-link');
     navLinks.forEach(link => {
@@ -3495,6 +4763,212 @@ function showSection(sectionId) {
             link.classList.add('active');
         }
     });
+
+    if (sectionId === 'settings') {
+        loadSettingsData();
+    }
+}
+
+// ============================================
+// SETTINGS FUNCTIONS
+// ============================================
+function loadSettingsData() {
+    const user = window.currentUser;
+    if (!user) return;
+
+    const usernameEl     = document.getElementById('settingsUsername');
+    const emailEl        = document.getElementById('settingsEmail');
+    const contactEl      = document.getElementById('settingsContact');
+    const accountTypeEl  = document.getElementById('settingsAccountType');
+    const accountTypeRow = document.getElementById('accountTypeField');
+
+    if (usernameEl)    usernameEl.value    = user.username      || '';
+    if (emailEl)       emailEl.value       = user.email         || '';
+    if (contactEl)     contactEl.value     = user.contactNumber || '';
+    if (accountTypeEl) accountTypeEl.value = user.accountType   || 'USER';
+
+    // Only show Account Type field for non-regular users
+    if (accountTypeRow) {
+        const hidden = ['USER', 'GUEST'].includes(user.accountType);
+        accountTypeRow.style.display = hidden ? 'none' : '';
+    }
+
+    if (!window.settingsListenersSetup) {
+        const editBtn = document.getElementById('editAccountBtn');
+        if (editBtn) editBtn.addEventListener('click', showEditAccountModal);
+
+        const changePwBtn = document.getElementById('changePasswordBtn');
+        if (changePwBtn) changePwBtn.addEventListener('click', showChangePasswordModal);
+
+        window.settingsListenersSetup = true;
+    }
+}
+
+function showEditAccountModal() {
+    const user = window.currentUser;
+    if (!user) return;
+
+    const canChangeUsername = !['USER', 'GUEST'].includes(user.accountType);
+    const usernameAttrs = canChangeUsername ? 'maxlength="50"' : 'disabled';
+
+    const formHtml = `
+        <div class="mb-3">
+            <label class="form-label fw-medium">Username</label>
+            <input type="text" class="form-control" id="editUsername" value="${escapeHtml(user.username || '')}" ${usernameAttrs}>
+            ${!canChangeUsername ? '<div class="form-text text-muted">Username cannot be changed.</div>' : ''}
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-medium">Email</label>
+            <input type="email" class="form-control" id="editEmail" value="${escapeHtml(user.email || '')}" maxlength="100">
+        </div>
+        <div class="mb-0">
+            <label class="form-label fw-medium">Contact Number</label>
+            <input type="tel" class="form-control" id="editContact" value="${escapeHtml(user.contactNumber || '')}" maxlength="20">
+        </div>`;
+
+    showModal(
+        'Edit Account',
+        formHtml,
+        'bg-sky',
+        [
+            { text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Save Changes', class: 'btn btn-sky', onclick: performUpdateAccount }
+        ]
+    );
+}
+
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+function performUpdateAccount() {
+    const username = document.getElementById('editUsername')?.value.trim();
+    const email    = document.getElementById('editEmail')?.value.trim();
+    const contact  = document.getElementById('editContact')?.value.trim();
+
+    if (!username || !email || !contact) {
+        showModal('Error', '<p class="mb-0">All fields are required.</p>', 'bg-danger', [
+            { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+        ]);
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('action', 'update_account');
+    formData.append('username', username);
+    formData.append('email', email);
+    formData.append('contactNumber', contact);
+
+    fetch('update_user.php', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Refresh cached user data
+                window.currentUser = data.user;
+                sessionStorage.setItem('userData', JSON.stringify(data.user));
+                // Refresh sidebar display
+                displayUserData(data.user);
+                // Refresh settings fields
+                loadSettingsData();
+                showModal(
+                    'Success',
+                    '<p class="mb-0"><i class="fa-solid fa-check-circle text-success me-2"></i>Account updated successfully!</p>',
+                    'bg-success',
+                    [{ text: 'Close', class: 'btn btn-success', dataDismiss: true }]
+                );
+            } else {
+                showModal('Error', `<p class="mb-0">${data.error || 'Update failed.'}</p>`, 'bg-danger', [
+                    { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+                ]);
+            }
+        })
+        .catch(() => {
+            showModal('Error', '<p class="mb-0">An error occurred. Please try again.</p>', 'bg-danger', [
+                { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+            ]);
+        });
+}
+
+function showChangePasswordModal() {
+    showModal(
+        'Change Password',
+        `<div class="mb-3">
+            <label class="form-label fw-medium">Current Password</label>
+            <input type="password" class="form-control" id="currentPassword" placeholder="Enter current password">
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-medium">New Password</label>
+            <input type="password" class="form-control" id="newPassword" placeholder="At least 8 characters">
+        </div>
+        <div class="mb-0">
+            <label class="form-label fw-medium">Confirm New Password</label>
+            <input type="password" class="form-control" id="confirmPassword" placeholder="Repeat new password">
+        </div>`,
+        'bg-danger',
+        [
+            { text: 'Cancel', class: 'btn btn-secondary', dataDismiss: true },
+            { text: 'Change Password', class: 'btn btn-danger', onclick: performChangePassword }
+        ]
+    );
+}
+
+function performChangePassword() {
+    const current = document.getElementById('currentPassword')?.value;
+    const newPw   = document.getElementById('newPassword')?.value;
+    const confirm = document.getElementById('confirmPassword')?.value;
+
+    if (!current || !newPw || !confirm) {
+        showModal('Error', '<p class="mb-0">All fields are required.</p>', 'bg-danger', [
+            { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+        ]);
+        return;
+    }
+
+    if (newPw !== confirm) {
+        showModal('Error', '<p class="mb-0">New passwords do not match.</p>', 'bg-danger', [
+            { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+        ]);
+        return;
+    }
+
+    if (newPw.length < 8) {
+        showModal('Error', '<p class="mb-0">New password must be at least 8 characters.</p>', 'bg-danger', [
+            { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+        ]);
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('action', 'change_password');
+    formData.append('current_password', current);
+    formData.append('new_password', newPw);
+    formData.append('confirm_password', confirm);
+
+    fetch('update_user.php', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showModal(
+                    'Success',
+                    '<p class="mb-0"><i class="fa-solid fa-check-circle text-success me-2"></i>Password changed successfully!</p>',
+                    'bg-success',
+                    [{ text: 'Close', class: 'btn btn-success', dataDismiss: true }]
+                );
+            } else {
+                showModal('Error', `<p class="mb-0">${data.error || 'Failed to change password.'}</p>`, 'bg-danger', [
+                    { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+                ]);
+            }
+        })
+        .catch(() => {
+            showModal('Error', '<p class="mb-0">An error occurred. Please try again.</p>', 'bg-danger', [
+                { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+            ]);
+        });
 }
 
 // ============================================
@@ -3557,48 +5031,71 @@ function renderReport(period) {
     const titleEl = document.getElementById('reportTitle');
     if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-file-invoice me-2"></i>${labels[period]}`;
 
+    // Group POS orders so a single transaction isn't split across multiple rows
+    const groupedFiltered = groupOrders(filtered);
+
     // Exclude PENDING and CANCELLED from confirmed revenue; POS orders always count as completed sales
     const completed = filtered.filter(o => o.Username === 'WALKIN_CUSTOMER' || (o.Status !== 'CANCELLED' && o.Status !== 'PENDING'));
     const totalRevenue = completed.reduce((s, o) => s + parseFloat(o.TotalPrice), 0);
     const pendingRevenue = filtered.filter(o => o.Status === 'PENDING' && o.Username !== 'WALKIN_CUSTOMER').reduce((s, o) => s + parseFloat(o.TotalPrice), 0);
     const totalQty = completed.reduce((s, o) => s + parseInt(o.Quantity), 0);
-    const avgOrder = completed.length ? totalRevenue / completed.length : 0;
+    const completedGroupCount = groupedFiltered.filter(g => g.isPOS || (g.items[0].Status !== 'CANCELLED' && g.items[0].Status !== 'PENDING')).length;
+    const avgOrder = completedGroupCount ? totalRevenue / completedGroupCount : 0;
 
     document.getElementById('reportTotalRevenue').innerHTML =
         `₱${totalRevenue.toFixed(2)}<br><span class="text-muted fw-normal" style="font-size:0.72rem;">+₱${pendingRevenue.toFixed(2)} pending</span>`;
-    document.getElementById('reportTotalOrders').textContent = completed.length;
+    document.getElementById('reportTotalOrders').textContent = completedGroupCount;
     document.getElementById('reportUnitsSold').textContent = totalQty;
     document.getElementById('reportAvgOrder').textContent = `₱${avgOrder.toFixed(2)}`;
-    document.getElementById('reportOrderCount').textContent = `${filtered.length} order${filtered.length !== 1 ? 's' : ''}`;
+    document.getElementById('reportOrderCount').textContent = `${groupedFiltered.length} order${groupedFiltered.length !== 1 ? 's' : ''}`;
 
     const tableBody = document.getElementById('reportsTableBody');
     tableBody.innerHTML = '';
 
-    if (filtered.length === 0) {
+    if (groupedFiltered.length === 0) {
         const periodLabel = period === 'today' ? 'today' : period === 'weekly' ? 'this week' : 'this month';
         tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4"><i class="fa-solid fa-inbox me-2"></i>No orders found for ${periodLabel}.</td></tr>`;
         return;
     }
 
-    filtered.forEach(o => {
-        const date = new Date(o.OrderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-        const customer = o.Username === 'WALKIN_CUSTOMER' ? '<span class="badge bg-secondary">Walk-In</span>' : (o.UserFullName || o.Username);
-        const isPOS = o.Username === 'WALKIN_CUSTOMER';
-        const statusColors = { PENDING: 'bg-warning', CONFIRMED: 'bg-info', SHIPPED: 'bg-primary', DELIVERED: 'bg-success', CANCELLED: 'bg-danger' };
-        const badge = isPOS ? '<span class="badge bg-success">POS</span>' : `<span class="badge ${statusColors[o.Status] || 'bg-secondary'}">${o.Status}</span>`;
+    const statusColors = { PENDING: 'bg-warning', CONFIRMED: 'bg-info', SHIPPED: 'bg-primary', DELIVERED: 'bg-success', CANCELLED: 'bg-danger' };
+
+    groupedFiltered.forEach(g => {
         const row = document.createElement('tr');
-        if (o.Status === 'CANCELLED' && !isPOS) row.classList.add('text-muted');
-        row.innerHTML = `
-            <td><strong>${o.OrderNumber}</strong></td>
-            <td>${customer}</td>
-            <td>${o.ProductName}</td>
-            <td>${o.Quantity}</td>
-            <td>₱${parseFloat(o.UnitPrice).toFixed(2)}</td>
-            <td><strong>₱${parseFloat(o.TotalPrice).toFixed(2)}</strong></td>
-            <td>${o.PaymentMethod || '—'}</td>
-            <td>${date}</td>
-            <td>${badge}</td>
-        `;
+        const date = new Date(g.OrderDate).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+
+        if (g.isPOS) {
+            const productList = g.items.map(i => i.ProductName).join(', ');
+            const totalQtyGroup = g.items.reduce((s, i) => s + parseInt(i.Quantity), 0);
+            const totalPriceGroup = g.items.reduce((s, i) => s + parseFloat(i.TotalPrice), 0);
+            row.innerHTML = `
+                <td><strong>${g.OrderNumber}</strong></td>
+                <td><span class="badge bg-secondary">Walk-In</span></td>
+                <td><small>${productList}</small></td>
+                <td>${totalQtyGroup}</td>
+                <td>—</td>
+                <td><strong>₱${totalPriceGroup.toFixed(2)}</strong></td>
+                <td>${g.items[0].PaymentMethod || '—'}</td>
+                <td>${date}</td>
+                <td><span class="badge bg-success">POS</span></td>
+            `;
+        } else {
+            const o = g.items[0];
+            if (o.Status === 'CANCELLED') row.classList.add('text-muted');
+            const customer = o.UserFullName || o.Username;
+            const badge = `<span class="badge ${statusColors[o.Status] || 'bg-secondary'}">${o.Status}</span>`;
+            row.innerHTML = `
+                <td><strong>${o.OrderNumber}</strong></td>
+                <td>${customer}</td>
+                <td>${o.ProductName}</td>
+                <td>${o.Quantity}</td>
+                <td>₱${parseFloat(o.UnitPrice).toFixed(2)}</td>
+                <td><strong>₱${parseFloat(o.TotalPrice).toFixed(2)}</strong></td>
+                <td>${o.PaymentMethod || '—'}</td>
+                <td>${date}</td>
+                <td>${badge}</td>
+            `;
+        }
         tableBody.appendChild(row);
     });
 }
