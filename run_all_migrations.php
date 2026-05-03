@@ -159,6 +159,22 @@ if (!$connFailed) {
         $steps[] = info("No UNIQUE constraint on OrderNumber (already correct)");
     }
 
+    // ─── PASSWORD RESETS TABLE ────────────────────────────────────────────────
+    $r = sqlsrv_query($conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='PasswordResets'");
+    if (!$r || !sqlsrv_fetch_array($r)) {
+        $sql = "CREATE TABLE PasswordResets (
+            ResetID   INT IDENTITY(1,1) PRIMARY KEY,
+            Email     NVARCHAR(100) NOT NULL,
+            Token     NVARCHAR(64)  NOT NULL UNIQUE,
+            ExpiresAt DATETIME      NOT NULL,
+            Used      BIT           NOT NULL DEFAULT 0,
+            CreatedAt DATETIME      NOT NULL DEFAULT GETDATE()
+        )";
+        $steps[] = sqlsrv_query($conn, $sql) ? ok("Created PasswordResets table") : err("Failed to create PasswordResets table: " . print_r(sqlsrv_errors(), true));
+    } else {
+        $steps[] = info("PasswordResets table already exists");
+    }
+
     // ─── SYSTEM ACCOUNTS ──────────────────────────────────────────────────────
     $adminUsername = "admin123";
     $r = sqlsrv_query($conn, "SELECT Username FROM Users WHERE Username = ?", [$adminUsername]);

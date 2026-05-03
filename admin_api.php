@@ -112,8 +112,9 @@ if ($action === 'get_all_users') {
         exit();
     }
     
+    $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
     $updateSql = "UPDATE Users SET Password = ? WHERE Username = ?";
-    $updateParams = array($newPassword, $targetUsername);
+    $updateParams = array($newHash, $targetUsername);
     
     if (sqlsrv_query($conn, $updateSql, $updateParams)) {
         echo json_encode(['success' => true, 'message' => 'Password reset successfully']);

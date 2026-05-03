@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(curl -s \"http://localhost/webapp/gentrisbest/migrate_add_shipped_date.php\")"
+      "Bash(curl -s \"http://localhost/webapp/gentrisbest/migrate_add_shipped_date.php\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\xampp\\\\htdocs\\\\webapp\\\\gentrisbest\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)"
     ]
   }
 }

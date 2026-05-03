@@ -16,14 +16,35 @@ $email = $_POST['email'];
 $password = $_POST['password'];
 $confirmPassword = $_POST['confirmPassword'];
 
+$errorMessage = null;
+
 if ($password !== $confirmPassword) {
-    $result = false;
+    $errorMessage = 'Passwords do not match.';
 } else {
+    // Check for duplicate email
+    $chkEmail = sqlsrv_query($conn, "SELECT 1 FROM Users WHERE Email = ?", [$email]);
+    if ($chkEmail && sqlsrv_fetch_array($chkEmail)) {
+        $errorMessage = 'That email address is already registered. Please use a different email or log in.';
+    } else {
+        // Check for duplicate username
+        $chkUser = sqlsrv_query($conn, "SELECT 1 FROM Users WHERE Username = ?", [$username]);
+        if ($chkUser && sqlsrv_fetch_array($chkUser)) {
+            $errorMessage = 'That username is already taken. Please choose a different username.';
+        }
+    }
+}
+
+if (!$errorMessage && $password === $confirmPassword) {
     $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
     $sql = "INSERT INTO Users (FirstName, LastName, Username, ContactNumber, Email, Password)
             VALUES (?, ?, ?, ?, ?, ?)";
     $params = array($firstname, $lastname, $username, $contact, $email, $hashedPassword);
     $result = sqlsrv_query($conn, $sql, $params);
+    if (!$result) {
+        $errorMessage = 'Registration failed due to a server error. Please try again.';
+    }
+} else {
+    $result = false;
 }
 ?>
 
@@ -62,11 +83,10 @@ if ($password !== $confirmPassword) {
             <h5 class="modal-title"><i class="fa-solid fa-circle-exclamation me-2"></i> Registration Failed</h5>
           </div>
           <div class="modal-body text-center">
-            <p class="fw-semibold">An error occurred while saving your registration.</p>
-            <pre class="text-muted small"><?= print_r(sqlsrv_errors(), true) ?></pre>
+            <p class="fw-semibold"><?= htmlspecialchars($errorMessage) ?></p>
           </div>
           <div class="modal-footer">
-            <a href="GenTrisBest_Register.html" class="btn btn-danger">Try Again</a>
+            <a href="register.html" class="btn btn-danger">Try Again</a>
           </div>
         </div>
       </div>
