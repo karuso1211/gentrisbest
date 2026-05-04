@@ -123,6 +123,27 @@ if ($action === 'get_available_products') {
         $updateParams = array($quantity, $productId);
         sqlsrv_query($conn, $updateSql, $updateParams);
 
+        // Log order placement — deduplicate so multi-item cart orders only log once per OrderNumber
+        $logPlaceDetails = "Order $orderNumber placed ({$product['ProductName']}, qty: $quantity, via $paymentMethod)";
+        $dupCheckSql = "SELECT COUNT(*) AS Cnt FROM ActivityLogs
+                        WHERE Username = ? AND Action = 'ORDER_PLACED'
+                        AND Details LIKE ? AND LoggedAt >= DATEADD(SECOND, -10, GETDATE())";
+        $dupStmt = sqlsrv_query($conn, $dupCheckSql, [$username, 'Order ' . $orderNumber . '%']);
+        $isDuplicate = false;
+        if ($dupStmt && $dupRow = sqlsrv_fetch_array($dupStmt, SQLSRV_FETCH_ASSOC)) {
+            $isDuplicate = $dupRow['Cnt'] > 0;
+        }
+        if (!$isDuplicate) {
+            $nameSql = "SELECT CONCAT(FirstName, ' ', LastName) AS FullName FROM Users WHERE Username = ?";
+            $nameStmt = sqlsrv_query($conn, $nameSql, [$username]);
+            $fullName = $username;
+            if ($nameStmt && $nameRow = sqlsrv_fetch_array($nameStmt, SQLSRV_FETCH_ASSOC)) {
+                $fullName = $nameRow['FullName'];
+            }
+            $logSql = "INSERT INTO ActivityLogs (Username, FullName, Action, Details) VALUES (?, ?, 'ORDER_PLACED', ?)";
+            sqlsrv_query($conn, $logSql, [$username, $fullName, $logPlaceDetails]);
+        }
+
         // Save GCash screenshot if provided
         if ($paymentMethod === 'GCASH' && isset($_FILES['gcashScreenshot']) && $_FILES['gcashScreenshot']['error'] === UPLOAD_ERR_OK) {
             $uploadDir = 'uploads/gcash_proofs/';
@@ -362,7 +383,23 @@ if ($action === 'get_available_products') {
         $restoreSql = "UPDATE Products SET Quantity = Quantity + ? WHERE ProductID = ?";
         $restoreParams = array($order['Quantity'], $order['ProductID']);
         sqlsrv_query($conn, $restoreSql, $restoreParams);
-        
+
+        // Log cancellation
+        $nameSql = "SELECT CONCAT(FirstName, ' ', LastName) AS FullName FROM Users WHERE Username = ?";
+        $nameStmt = sqlsrv_query($conn, $nameSql, [$username]);
+        $fullName = $username;
+        if ($nameStmt && $nameRow = sqlsrv_fetch_array($nameStmt, SQLSRV_FETCH_ASSOC)) {
+            $fullName = $nameRow['FullName'];
+        }
+        $orderNumSql = "SELECT OrderNumber FROM Orders WHERE OrderID = ?";
+        $orderNumStmt = sqlsrv_query($conn, $orderNumSql, [$orderId]);
+        $orderNumber = '#' . $orderId;
+        if ($orderNumStmt && $orderNumRow = sqlsrv_fetch_array($orderNumStmt, SQLSRV_FETCH_ASSOC)) {
+            $orderNumber = $orderNumRow['OrderNumber'];
+        }
+        $logSql = "INSERT INTO ActivityLogs (Username, FullName, Action, Details) VALUES (?, ?, 'ORDER_CANCELLED', ?)";
+        sqlsrv_query($conn, $logSql, [$username, $fullName, "Order $orderNumber cancelled"]);
+
         echo json_encode(['success' => true, 'message' => 'Order cancelled successfully']);
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to cancel order']);
@@ -404,6 +441,22 @@ if ($action === 'get_available_products') {
     $updateParams = array($orderId);
 
     if (sqlsrv_query($conn, $updateSql, $updateParams)) {
+        // Log delivery confirmation
+        $nameSql = "SELECT CONCAT(FirstName, ' ', LastName) AS FullName FROM Users WHERE Username = ?";
+        $nameStmt = sqlsrv_query($conn, $nameSql, [$username]);
+        $fullName = $username;
+        if ($nameStmt && $nameRow = sqlsrv_fetch_array($nameStmt, SQLSRV_FETCH_ASSOC)) {
+            $fullName = $nameRow['FullName'];
+        }
+        $orderNumSql = "SELECT OrderNumber FROM Orders WHERE OrderID = ?";
+        $orderNumStmt = sqlsrv_query($conn, $orderNumSql, [$orderId]);
+        $orderNumber = '#' . $orderId;
+        if ($orderNumStmt && $orderNumRow = sqlsrv_fetch_array($orderNumStmt, SQLSRV_FETCH_ASSOC)) {
+            $orderNumber = $orderNumRow['OrderNumber'];
+        }
+        $logSql = "INSERT INTO ActivityLogs (Username, FullName, Action, Details) VALUES (?, ?, 'ORDER_DELIVERED', ?)";
+        sqlsrv_query($conn, $logSql, [$username, $fullName, "Order $orderNumber confirmed as delivered by customer"]);
+
         echo json_encode(['success' => true, 'message' => 'Order marked as delivered successfully']);
     } else {
         echo json_encode(['success' => false, 'error' => 'Failed to confirm delivery']);
@@ -466,6 +519,34 @@ if ($action === 'get_available_products') {
     $updateParams = array($newStatus, $orderId);
 
     if (sqlsrv_query($conn, $updateSql, $updateParams)) {
+        // Log order status change — deduplicate by OrderNumber so cart orders (multiple IDs, one number) only log once
+        $orderNumSql = "SELECT OrderNumber FROM Orders WHERE OrderID = ?";
+        $orderNumStmt = sqlsrv_query($conn, $orderNumSql, [$orderId]);
+        $orderNumber = '#' . $orderId;
+        if ($orderNumStmt && $orderNumRow = sqlsrv_fetch_array($orderNumStmt, SQLSRV_FETCH_ASSOC)) {
+            $orderNumber = $orderNumRow['OrderNumber'];
+        }
+        $logDetails = "Order $orderNumber status changed from {$order['Status']} to $newStatus";
+        // Only insert if no identical log exists in the last 10 seconds (prevents duplicate logs for multi-item orders)
+        $dupCheckSql = "SELECT COUNT(*) AS Cnt FROM ActivityLogs
+                        WHERE Username = ? AND Action = 'ORDER_STATUS_UPDATE' AND Details = ?
+                        AND LoggedAt >= DATEADD(SECOND, -10, GETDATE())";
+        $dupStmt = sqlsrv_query($conn, $dupCheckSql, [$username, $logDetails]);
+        $isDuplicate = false;
+        if ($dupStmt && $dupRow = sqlsrv_fetch_array($dupStmt, SQLSRV_FETCH_ASSOC)) {
+            $isDuplicate = $dupRow['Cnt'] > 0;
+        }
+        if (!$isDuplicate) {
+            $nameSql = "SELECT CONCAT(FirstName, ' ', LastName) AS FullName FROM Users WHERE Username = ?";
+            $nameStmt = sqlsrv_query($conn, $nameSql, [$username]);
+            $fullName = $username;
+            if ($nameStmt && $nameRow = sqlsrv_fetch_array($nameStmt, SQLSRV_FETCH_ASSOC)) {
+                $fullName = $nameRow['FullName'];
+            }
+            $logSql = "INSERT INTO ActivityLogs (Username, FullName, Action, Details) VALUES (?, ?, 'ORDER_STATUS_UPDATE', ?)";
+            sqlsrv_query($conn, $logSql, [$username, $fullName, $logDetails]);
+        }
+
         $statusMessage = ($newStatus === 'SHIPPED') ? 'marked as shipped' : 'marked as delivered';
         echo json_encode(['success' => true, 'message' => 'Order ' . $statusMessage . ' successfully']);
     } else {

@@ -297,6 +297,7 @@ function displayUserData(userData) {
     const adminTab = document.getElementById('adminNavItem');
     const posTab = document.getElementById('posNavItem');
     const cartNavItem = document.getElementById('cartNavItem');
+    const logsNavItem = document.getElementById('logsNavItem');
 
     if (isGuest) {
         // Hide all restricted tabs for guests
@@ -306,6 +307,7 @@ function displayUserData(userData) {
         if (adminTab) adminTab.style.display = 'none';
         if (posTab) posTab.style.display = 'none';
         if (cartNavItem) cartNavItem.style.display = 'none';
+        if (logsNavItem) logsNavItem.style.display = 'none';
     } else {
         // Show tabs for authenticated users based on their role
         // Reports tab is visible only to ADMIN, INVENTORY, MANAGER
@@ -318,9 +320,12 @@ function displayUserData(userData) {
         
         if (analyticsNavItem) analyticsNavItem.style.display = 'block';
         
-        // Show admin tab if user is admin
+        // Show admin tab and logs tab if user is admin
         if (userData.accountType === 'ADMIN') {
             if (adminTab) adminTab.style.display = 'block';
+            if (logsNavItem) logsNavItem.style.display = 'block';
+        } else {
+            if (logsNavItem) logsNavItem.style.display = 'none';
         }
 
         // Show inventory tab if user has inventory access (ADMIN, INVENTORY, MANAGER, FRONT DESK)
@@ -831,9 +836,10 @@ function displayBrowseProducts(products) {
         return;
     }
 
-    // Check if current user is a guest
+    // Check if current user is a guest or admin
     const isGuest = window.currentUser && (window.currentUser.accountType === 'GUEST' || window.currentUser.isGuest);
-    
+    const isAdmin = window.currentUser && ['ADMIN', 'INVENTORY', 'FRONT DESK', 'MANAGER'].includes(window.currentUser.accountType);
+
     products.forEach(product => {
         const isOutOfStock = product.Quantity <= 0;
         const stockClass = product.Quantity <= 5 ? 'text-danger' : 'text-success';
@@ -903,7 +909,8 @@ function displayBrowseProducts(products) {
                         ${eligibilityHint}
 
                         <div class="product-button-wrapper mt-2">
-                            ${isOutOfStock ? 
+                            ${isAdmin ? '' :
+                                isOutOfStock ?
                                 '<button class="btn btn-secondary w-100" disabled><i class="fa-solid fa-times me-2"></i>Out of Stock</button>' :
                                 isGuest ?
                                 '<button class="btn btn-outline-sky w-100" disabled title="Please login to order"><i class="fa-solid fa-lock me-2"></i>Login to Order</button>' :
@@ -3568,50 +3575,209 @@ function printCartOrderReceipt(encodedGroupedOrder) {
     const groupedOrder = JSON.parse(atob(encodedGroupedOrder));
     const items = groupedOrder.items;
     const deliveryFee = items.reduce((s, i) => s + (parseFloat(i.DeliveryFee) || 0), 0);
-    const grandTotal = items.reduce((s, i) => s + parseFloat(i.TotalPrice), 0);
+    const itemsSubtotal = items.reduce((s, i) => s + parseFloat(i.TotalPrice), 0) - deliveryFee;
+    const grandTotal = itemsSubtotal + deliveryFee;
     const orderDate = new Date(groupedOrder.OrderDate);
+    const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const formattedTime = orderDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const deliveryAddress = items.find(i => i.DeliveryAddress)?.DeliveryAddress || '';
-    const paymentMethod = items[0].PaymentMethod || '';
-    const shippedDateRaw2 = items.find(i => i.ShippedDate)?.ShippedDate || null;
-    const deliveryDateRaw2 = items.find(i => i.DeliveryDate)?.DeliveryDate || null;
-    const fmtDT2 = d => new Date(d).toLocaleString('en-US');
+    const notes = items.find(i => i.Notes)?.Notes || '';
+    const paymentMethod = items[0].PaymentMethod || 'Cash On Delivery';
+    const shippedDateRaw = items.find(i => i.ShippedDate)?.ShippedDate || null;
+    const deliveryDateRaw = items.find(i => i.DeliveryDate)?.DeliveryDate || null;
+    const allStatuses = [...new Set(items.map(i => i.Status))];
+    const repStatus = allStatuses.length === 1 ? allStatuses[0] : 'MIXED';
+    const fmtDT = d => { const dt = new Date(d); return dt.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) + ' at ' + dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }); };
 
-    let itemRows = items.map(i => `
+    let paymentMethodDisplay = paymentMethod;
+    let paymentMethodEmoji = '💵';
+    if (paymentMethod === 'GCASH') paymentMethodEmoji = '📱';
+    else if (paymentMethod === 'Card') paymentMethodEmoji = '💳';
+
+    const itemRows = items.map(i => `
         <tr>
-            <td style="padding:4px 8px;">${i.ProductName}</td>
-            <td style="padding:4px 8px;text-align:center;">${i.Quantity}</td>
-            <td style="padding:4px 8px;text-align:right;">₱${parseFloat(i.UnitPrice).toFixed(2)}</td>
-            <td style="padding:4px 8px;text-align:right;">₱${(parseFloat(i.TotalPrice) - (parseFloat(i.DeliveryFee)||0)).toFixed(2)}</td>
+            <td style="padding:8px 10px;border:1px solid #e0e0e0;">${i.ProductName}</td>
+            <td style="padding:8px 10px;border:1px solid #e0e0e0;text-align:center;">${i.Quantity} unit${parseInt(i.Quantity) !== 1 ? 's' : ''}</td>
+            <td style="padding:8px 10px;border:1px solid #e0e0e0;text-align:right;">₱${parseFloat(i.UnitPrice).toFixed(2)}</td>
+            <td style="padding:8px 10px;border:1px solid #e0e0e0;text-align:right;">₱${(parseFloat(i.TotalPrice) - (parseFloat(i.DeliveryFee) || 0)).toFixed(2)}</td>
         </tr>`).join('');
 
-    const html = `<!DOCTYPE html><html><head><title>Order Receipt ${groupedOrder.OrderNumber}</title>
-        <style>body{font-family:Arial,sans-serif;max-width:600px;margin:40px auto;color:#333;}
-        h2{color:#0ea5e9;}table{width:100%;border-collapse:collapse;margin:12px 0;}
-        th,td{border:1px solid #ddd;padding:6px 8px;}th{background:#f0f9ff;}
-        .total{font-weight:bold;background:#f0f9ff;}.footer{margin-top:20px;color:#888;font-size:0.85em;}</style>
-        </head><body>
-        <h2>GenTri's Best — Order Receipt</h2>
-        <p><strong>Order #:</strong> ${groupedOrder.OrderNumber}<br>
-        <strong>Date:</strong> ${orderDate.toLocaleString('en-US')}<br>
-        <strong>Payment:</strong> ${paymentMethod}</p>
-        <table style="width:100%;border-collapse:collapse;margin:8px 0 12px;"><thead><tr><th style="background:#f0f9ff;padding:6px 8px;border:1px solid #ddd;text-align:left;">Milestone</th><th style="background:#f0f9ff;padding:6px 8px;border:1px solid #ddd;text-align:left;">Date & Time</th></tr></thead><tbody>
-        <tr><td style="padding:5px 8px;border:1px solid #ddd;">📋 Order Placed</td><td style="padding:5px 8px;border:1px solid #ddd;">${orderDate.toLocaleString('en-US')}</td></tr>
-        <tr><td style="padding:5px 8px;border:1px solid #ddd;">🚚 Shipped</td><td style="padding:5px 8px;border:1px solid #ddd;color:${shippedDateRaw2 ? '#004085' : '#999'};">${shippedDateRaw2 ? fmtDT2(shippedDateRaw2) : 'Not yet shipped'}</td></tr>
-        <tr><td style="padding:5px 8px;border:1px solid #ddd;">📦 Delivered</td><td style="padding:5px 8px;border:1px solid #ddd;color:${deliveryDateRaw2 ? '#155724' : '#999'};">${deliveryDateRaw2 ? fmtDT2(deliveryDateRaw2) : 'Not yet delivered'}</td></tr>
-        </tbody></table>
-        <table><thead><tr><th>Product</th><th>Qty</th><th>Unit Price</th><th>Subtotal</th></tr></thead>
-        <tbody>${itemRows}
-        <tr><td colspan="3" style="text-align:right;color:#666;">Delivery Fee</td><td style="text-align:right;">₱${deliveryFee.toFixed(2)}</td></tr>
-        <tr class="total"><td colspan="3" style="text-align:right;">Grand Total</td><td style="text-align:right;color:#16a34a;">₱${grandTotal.toFixed(2)}</td></tr>
-        </tbody></table>
-        ${deliveryAddress ? `<p><strong>Deliver to:</strong> ${deliveryAddress}</p>` : ''}
-        <div class="footer">Thank you for shopping at GenTri's Best!</div>
-        </body></html>`;
+    const receiptHTML = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Receipt - ${groupedOrder.OrderNumber}</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { font-family: 'Arial', sans-serif; background-color: #f5f5f5; padding: 20px; line-height: 1.6; }
+                .receipt-container { max-width: 600px; margin: 20px auto; background-color: white; padding: 40px; border: 1px solid #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                .receipt-header { text-align: center; border-bottom: 2px solid #0ea5e9; padding-bottom: 20px; margin-bottom: 30px; }
+                .receipt-header h1 { color: #0ea5e9; font-size: 28px; margin-bottom: 5px; }
+                .receipt-header p { color: #666; font-size: 14px; }
+                .order-number { background-color: #e0f2fe; padding: 15px; border-left: 4px solid #0ea5e9; margin-bottom: 20px; border-radius: 4px; }
+                .order-number strong { color: #0ea5e9; font-size: 18px; }
+                .receipt-section { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0; }
+                .receipt-section:last-child { border-bottom: none; }
+                .section-title { color: #0ea5e9; font-weight: bold; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; }
+                .receipt-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+                .receipt-row .label { color: #666; font-weight: 500; }
+                .receipt-row .value { color: #333; font-weight: 600; }
+                .items-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+                .items-table th { background-color: #e0f2fe; color: #0ea5e9; padding: 8px 10px; border: 1px solid #b3e0f7; text-align: left; font-size: 13px; }
+                .items-table th:not(:first-child) { text-align: right; }
+                .items-table th:nth-child(2) { text-align: center; }
+                .pricing-summary { background-color: #e0f2fe; padding: 20px; border-radius: 4px; margin-top: 20px; }
+                .pricing-row { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
+                .total-row { display: flex; justify-content: space-between; margin-top: 15px; padding-top: 15px; border-top: 2px solid #0ea5e9; font-size: 18px; font-weight: bold; color: #0ea5e9; }
+                .badge { display: inline-block; padding: 4px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; }
+                .badge-success { background-color: #d4edda; color: #155724; }
+                .badge-warning { background-color: #fff3cd; color: #856404; }
+                .badge-info { background-color: #d1ecf1; color: #0c5460; }
+                .badge-primary { background-color: #d6d8db; color: #004085; }
+                .badge-secondary { background-color: #e2e3e5; color: #383d41; }
+                .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 12px; }
+                @media print {
+                    body { background-color: white; padding: 0; }
+                    .receipt-container { max-width: 100%; box-shadow: none; border: none; margin: 0; padding: 0; }
+                }
+            </style>
+        </head>
+        <body>
+            <div class="receipt-container">
+                <div class="receipt-header">
+                    <h1>GenTri's Best</h1>
+                    <p>Dairy Box - Order Receipt</p>
+                </div>
+
+                <div class="order-number">
+                    <strong>Order #${groupedOrder.OrderNumber}</strong>
+                </div>
+
+                <div class="receipt-section">
+                    <div class="section-title">Order Information</div>
+                    <div class="receipt-row">
+                        <span class="label">Order Date:</span>
+                        <span class="value">${formattedDate} at ${formattedTime}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="label">Status:</span>
+                        <span class="value"><span class="badge badge-${
+                            repStatus === 'PENDING' ? 'warning' :
+                            repStatus === 'CONFIRMED' ? 'info' :
+                            repStatus === 'SHIPPED' ? 'primary' :
+                            repStatus === 'MIXED' ? 'secondary' :
+                            'success'
+                        }">${repStatus}</span></span>
+                    </div>
+                </div>
+
+                <div class="receipt-section">
+                    <div class="section-title">Order Timeline</div>
+                    <div class="receipt-row">
+                        <span class="label">📋 Order Placed:</span>
+                        <span class="value">${formattedDate} at ${formattedTime}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="label">🚚 Shipped by Manager:</span>
+                        <span class="value" style="color:${shippedDateRaw ? '#004085' : '#999'};">${shippedDateRaw ? fmtDT(shippedDateRaw) : 'Not yet shipped'}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="label">📦 Delivered:</span>
+                        <span class="value" style="color:${deliveryDateRaw ? '#155724' : '#999'};">${deliveryDateRaw ? fmtDT(deliveryDateRaw) : 'Not yet delivered'}</span>
+                    </div>
+                </div>
+
+                ${groupedOrder.UserFullName ? `
+                <div class="receipt-section">
+                    <div class="section-title">Customer Information</div>
+                    <div class="receipt-row">
+                        <span class="label">Name:</span>
+                        <span class="value">${groupedOrder.UserFullName}</span>
+                    </div>
+                    <div class="receipt-row">
+                        <span class="label">Username:</span>
+                        <span class="value">${groupedOrder.Username}</span>
+                    </div>
+                    ${groupedOrder.UserContactNumber ? `
+                    <div class="receipt-row">
+                        <span class="label">📞 Phone Number:</span>
+                        <span class="value">${groupedOrder.UserContactNumber}</span>
+                    </div>` : ''}
+                </div>` : ''}
+
+                <div class="receipt-section">
+                    <div class="section-title">Product Details</div>
+                    <table class="items-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th style="text-align:center;">Qty</th>
+                                <th style="text-align:right;">Unit Price</th>
+                                <th style="text-align:right;">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>${itemRows}</tbody>
+                    </table>
+                </div>
+
+                <div class="pricing-summary">
+                    <div class="pricing-row">
+                        <span class="label">Items Subtotal:</span>
+                        <span class="value">₱${itemsSubtotal.toFixed(2)}</span>
+                    </div>
+                    <div class="pricing-row">
+                        <span class="label">🛵 Delivery Fee (Lalamove):</span>
+                        <span class="value">₱${deliveryFee.toFixed(2)}</span>
+                    </div>
+                    <div class="total-row">
+                        <span>GRAND TOTAL:</span>
+                        <span>₱${grandTotal.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                ${deliveryAddress ? `
+                <div class="receipt-section" style="margin-top: 25px;">
+                    <div class="section-title">📍 Delivery Location</div>
+                    <div style="background-color: #f9f9f9; padding: 12px; border-radius: 4px; font-size: 13px; line-height: 1.5;">
+                        ${deliveryAddress}
+                    </div>
+                </div>` : ''}
+
+                <div class="receipt-section" style="margin-top: 25px;">
+                    <div class="section-title">Payment Information</div>
+                    <div class="receipt-row">
+                        <span class="label">Payment Method:</span>
+                        <span class="value">${paymentMethodEmoji} ${paymentMethodDisplay}</span>
+                    </div>
+                </div>
+
+                ${notes ? `
+                <div class="receipt-section">
+                    <div class="section-title">Order Notes</div>
+                    <div style="background-color: #f9f9f9; padding: 10px; border-radius: 4px; font-size: 13px;">
+                        ${notes}
+                    </div>
+                </div>` : ''}
+
+                <div class="footer">
+                    <p>Thank you for your order!</p>
+                    <p style="margin-top: 5px;">GenTri's Best - Dairy Box</p>
+                    <p style="margin-top: 5px; color: #999;">This is an automated receipt. Please keep for your records.</p>
+                </div>
+            </div>
+
+            <script>
+                window.onload = function() { window.print(); };
+            </script>
+        </body>
+        </html>
+    `;
 
     const w = window.open('', '_blank');
-    w.document.write(html);
+    w.document.write(receiptHTML);
     w.document.close();
-    w.onload = () => w.print();
 }
 
 function cancelGroupedOrder(orderIds, orderNumber) {
@@ -5517,4 +5683,109 @@ function performDeleteProduct(productId) {
             {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
         ]);
     });
+}
+
+// ============================================
+// ACTIVITY LOGS (Admin only)
+// ============================================
+let logsCurrentPage = 1;
+
+function loadActivityLogs(page) {
+    if (page !== undefined) logsCurrentPage = page;
+
+    const filterAction = document.getElementById('logsFilterAction')?.value || '';
+    const filterUser   = document.getElementById('logsFilterUser')?.value   || '';
+    const filterFrom   = document.getElementById('logsFilterFrom')?.value   || '';
+    const filterTo     = document.getElementById('logsFilterTo')?.value     || '';
+    const tableBody    = document.getElementById('logsTableBody');
+    const pagination   = document.getElementById('logsPagination');
+
+    if (tableBody) {
+        tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">
+            <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading logs...</td></tr>`;
+    }
+
+    const params = new URLSearchParams({
+        action: 'get_logs',
+        page: logsCurrentPage,
+        filterAction,
+        filterUser,
+        filterFrom,
+        filterTo
+    });
+
+    fetch('logs_api.php?' + params.toString(), { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">${data.error || 'Failed to load logs'}</td></tr>`;
+                return;
+            }
+
+            const totalEl = document.getElementById('logsTotalCount');
+            if (totalEl) totalEl.textContent = data.total + ' entries';
+
+            if (!data.logs.length) {
+                if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">No log entries found.</td></tr>`;
+                if (pagination) pagination.style.display = 'none';
+                return;
+            }
+
+            const actionBadge = {
+                LOGIN:               '<span class="badge bg-success">Login</span>',
+                LOGOUT:              '<span class="badge bg-secondary">Logout</span>',
+                ORDER_STATUS_UPDATE: '<span class="badge bg-primary">Status Update</span>',
+                ORDER_CANCELLED:     '<span class="badge bg-danger">Cancelled</span>',
+                ORDER_DELIVERED:     '<span class="badge bg-info text-dark">Delivered</span>',
+            };
+
+            tableBody.innerHTML = data.logs.map(log => {
+                const badge = actionBadge[log.Action] || `<span class="badge bg-warning text-dark">${log.Action}</span>`;
+                const dt = log.LoggedAt ? new Date(log.LoggedAt).toLocaleString('en-PH', {
+                    year: 'numeric', month: 'short', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+                }) : '—';
+                return `<tr>
+                    <td class="ps-3 text-nowrap small">${dt}</td>
+                    <td><strong>${log.Username}</strong></td>
+                    <td>${log.FullName || '—'}</td>
+                    <td>${badge}</td>
+                    <td class="text-muted small">${log.Details || '—'}</td>
+                </tr>`;
+            }).join('');
+
+            // Pagination controls
+            const totalPages = Math.ceil(data.total / data.pageSize);
+            const pageInfo   = document.getElementById('logsPageInfo');
+            const prevBtn    = document.getElementById('logsPrevBtn');
+            const nextBtn    = document.getElementById('logsNextBtn');
+
+            if (pagination) pagination.style.display = 'flex';
+            if (pageInfo)   pageInfo.textContent = `Page ${logsCurrentPage} of ${totalPages}`;
+            if (prevBtn)    prevBtn.disabled = logsCurrentPage <= 1;
+            if (nextBtn)    nextBtn.disabled = logsCurrentPage >= totalPages;
+        })
+        .catch(err => {
+            console.error('Error loading logs:', err);
+            if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">Error loading logs.</td></tr>`;
+        });
+}
+
+function logsChangePage(delta) {
+    logsCurrentPage = Math.max(1, logsCurrentPage + delta);
+    loadActivityLogs();
+}
+
+let _logsUserFilterTimer = null;
+function logsUserFilterDebounce() {
+    clearTimeout(_logsUserFilterTimer);
+    _logsUserFilterTimer = setTimeout(() => loadActivityLogs(1), 400);
+}
+
+function logsClearDateFilter() {
+    const from = document.getElementById('logsFilterFrom');
+    const to   = document.getElementById('logsFilterTo');
+    if (from) from.value = '';
+    if (to)   to.value   = '';
+    loadActivityLogs(1);
 }
