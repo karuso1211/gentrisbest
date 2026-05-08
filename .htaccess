@@ -1,0 +1,5 @@
+# Block direct HTTP access to sensitive config files
+<FilesMatch "^(mail_config|db_config)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

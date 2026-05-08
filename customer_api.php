@@ -28,9 +28,9 @@ if ($action !== 'get_available_products' && !$username) {
 
 if ($action === 'get_available_products') {
     // Fetch only ACTIVE products with quantity > 0
-    $sql = "SELECT ProductID, ProductName, Description, Category, Price, WholesalePrice, Quantity, Status 
-            FROM Products 
-            WHERE Status = 'ACTIVE' 
+    $sql = "SELECT ProductID, ProductName, Description, Category, Price, WholesalePrice, Quantity, Status, ImagePath
+            FROM Products
+            WHERE Status = 'ACTIVE'
             ORDER BY ProductName";
     
     $result = sqlsrv_query($conn, $sql);

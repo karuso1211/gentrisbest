@@ -57,8 +57,13 @@ if (!$insertStmt) {
 
 sqlsrv_close($conn);
 
-// Build reset URL
-$resetLink = APP_URL . '/reset_password.html?token=' . urlencode($token);
+// Build reset URL dynamically from the incoming request so it works
+// whether accessed via localhost or a Cloudflare tunnel domain.
+$protocol  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host      = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$scriptDir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/\\');
+$baseUrl   = $protocol . '://' . $host . $scriptDir;
+$resetLink = $baseUrl . '/reset_password.html?token=' . urlencode($token);
 $firstName = htmlspecialchars($user['FirstName'], ENT_QUOTES, 'UTF-8');
 
 // Send email via PHPMailer + Gmail SMTP

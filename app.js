@@ -65,6 +65,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 e.preventDefault();
                 handleAddProduct();
             });
+            const productImageInput = document.getElementById('productImage');
+            if (productImageInput) {
+                productImageInput.addEventListener('change', function() {
+                    const preview = document.getElementById('productImagePreview');
+                    const previewImg = document.getElementById('productImagePreviewImg');
+                    if (this.files && this.files[0]) {
+                        previewImg.src = URL.createObjectURL(this.files[0]);
+                        preview.style.display = 'block';
+                    } else {
+                        preview.style.display = 'none';
+                    }
+                });
+            }
         }
     }
 
@@ -889,8 +902,14 @@ function displayBrowseProducts(products) {
         
         const productCard = document.createElement('div');
         productCard.className = 'col-md-4 mb-4';
+        const browseEscapedName = product.ProductName.replace(/'/g, "\\'");
+        const browseEscapedPath = (product.ImagePath || '').replace(/'/g, "\\'");
+        const browseImgHtml = product.ImagePath
+            ? `<img src="${product.ImagePath}" alt="${product.ProductName}" class="card-img-top" onclick="previewProductImage('${browseEscapedPath}','${browseEscapedName}')" style="height:160px;object-fit:cover;cursor:pointer;" title="Click to preview">`
+            : `<div class="bg-light d-flex align-items-center justify-content-center" style="height:100px;"><i class="fa-solid fa-image fa-2x text-muted"></i></div>`;
         productCard.innerHTML = `
             <div class="card border-0 shadow-sm h-100 ${isOutOfStock ? 'opacity-75' : ''}">
+                ${browseImgHtml}
                 <div class="card-body product-card-body d-flex flex-column h-100">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h6 class="card-title fw-bold">${product.ProductName}</h6>
@@ -2516,8 +2535,14 @@ function displayPOSProducts(products) {
         
         const productCard = document.createElement('div');
         productCard.className = 'col-md-4 mb-4';
+        const posEscapedName = product.ProductName.replace(/'/g, "\\'");
+        const posEscapedPath = (product.ImagePath || '').replace(/'/g, "\\'");
+        const posImgHtml = product.ImagePath
+            ? `<img src="${product.ImagePath}" alt="${product.ProductName}" class="card-img-top" onclick="previewProductImage('${posEscapedPath}','${posEscapedName}')" style="height:160px;object-fit:cover;cursor:pointer;" title="Click to preview">`
+            : `<div class="bg-light d-flex align-items-center justify-content-center" style="height:100px;"><i class="fa-solid fa-image fa-2x text-muted"></i></div>`;
         productCard.innerHTML = `
             <div class="card border-0 shadow-sm h-100 ${isOutOfStock ? 'opacity-75' : ''}">
+                ${posImgHtml}
                 <div class="card-body product-card-body d-flex flex-column h-100">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <h6 class="card-title fw-bold">${product.ProductName}</h6>
@@ -2533,7 +2558,7 @@ function displayPOSProducts(products) {
                     <div class="mt-auto">
                         ${priceDisplay}
                         <div class="product-button-wrapper mt-2">
-                            ${isOutOfStock ? 
+                            ${isOutOfStock ?
                                 '<button class="btn btn-secondary w-100" disabled><i class="fa-solid fa-times me-2"></i>Out of Stock</button>' :
                                 `<button class="btn btn-sky w-100 btn-order-fixed" onclick="quickAddToCart(${product.ProductID}, '${product.ProductName}', ${product.Price}, ${product.WholesalePrice || 'null'})">
                                     <i class="fa-solid fa-shopping-cart me-2"></i>Add to Cart
@@ -5147,7 +5172,15 @@ function performChangePassword() {
 function loadReports() {
     if (!window.reportListenersSetup) {
         document.querySelectorAll('input[name="reportPeriod"]').forEach(radio => {
-            radio.addEventListener('change', () => renderReport(radio.value));
+            radio.addEventListener('change', () => {
+                const customRange = document.getElementById('reportCustomDateRange');
+                if (radio.value === 'custom') {
+                    customRange.style.display = 'flex';
+                } else {
+                    customRange.style.display = 'none';
+                    renderReport(radio.value);
+                }
+            });
         });
         window.reportListenersSetup = true;
     }
@@ -5186,6 +5219,21 @@ function renderReport(period) {
         startOfWeek.setDate(now.getDate() - now.getDay());
         startOfWeek.setHours(0, 0, 0, 0);
         filtered = orders.filter(o => new Date(o.OrderDate) >= startOfWeek);
+    } else if (period === 'custom') {
+        const fromVal = document.getElementById('reportDateFrom').value;
+        const toVal = document.getElementById('reportDateTo').value;
+        if (fromVal && toVal) {
+            const fromDate = new Date(fromVal);
+            fromDate.setHours(0, 0, 0, 0);
+            const toDate = new Date(toVal);
+            toDate.setHours(23, 59, 59, 999);
+            filtered = orders.filter(o => {
+                const d = new Date(o.OrderDate);
+                return d >= fromDate && d <= toDate;
+            });
+        } else {
+            filtered = [];
+        }
     } else {
         filtered = orders.filter(o => {
             const d = new Date(o.OrderDate);
@@ -5193,9 +5241,20 @@ function renderReport(period) {
         });
     }
 
-    const labels = { today: "Today's Sales Report", weekly: 'Weekly Sales Report', monthly: 'Monthly Sales Report' };
     const titleEl = document.getElementById('reportTitle');
-    if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-file-invoice me-2"></i>${labels[period]}`;
+    if (period === 'custom') {
+        const fromVal = document.getElementById('reportDateFrom').value;
+        const toVal = document.getElementById('reportDateTo').value;
+        if (fromVal && toVal) {
+            const fmt = v => new Date(v).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-file-invoice me-2"></i>Sales Report: ${fmt(fromVal)} – ${fmt(toVal)}`;
+        } else {
+            if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-file-invoice me-2"></i>Custom Sales Report`;
+        }
+    } else {
+        const labels = { today: "Today's Sales Report", weekly: 'Weekly Sales Report', monthly: 'Monthly Sales Report' };
+        if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-file-invoice me-2"></i>${labels[period]}`;
+    }
 
     // Group POS orders so a single transaction isn't split across multiple rows
     const groupedFiltered = groupOrders(filtered);
@@ -5219,7 +5278,7 @@ function renderReport(period) {
     tableBody.innerHTML = '';
 
     if (groupedFiltered.length === 0) {
-        const periodLabel = period === 'today' ? 'today' : period === 'weekly' ? 'this week' : 'this month';
+        const periodLabel = period === 'today' ? 'today' : period === 'weekly' ? 'this week' : period === 'custom' ? 'the selected date range' : 'this month';
         tableBody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4"><i class="fa-solid fa-inbox me-2"></i>No orders found for ${periodLabel}.</td></tr>`;
         return;
     }
@@ -5266,8 +5325,94 @@ function renderReport(period) {
     });
 }
 
+function applyCustomDateRange() {
+    const fromVal = document.getElementById('reportDateFrom').value;
+    const toVal = document.getElementById('reportDateTo').value;
+    if (!fromVal || !toVal) {
+        alert('Please select both a start date and an end date.');
+        return;
+    }
+    if (new Date(fromVal) > new Date(toVal)) {
+        alert('Start date cannot be after end date.');
+        return;
+    }
+    renderReport('custom');
+}
+
+function printReport() {
+    const titleEl = document.getElementById('reportTitle');
+    const title = titleEl ? titleEl.innerText.trim() : 'Sales Report';
+    const revenue = document.getElementById('reportTotalRevenue').innerText.trim();
+    const ordersCount = document.getElementById('reportTotalOrders').innerText.trim();
+    const units = document.getElementById('reportUnitsSold').innerText.trim();
+    const avg = document.getElementById('reportAvgOrder').innerText.trim();
+    const orderCount = document.getElementById('reportOrderCount').innerText.trim();
+
+    const rows = document.querySelectorAll('#reportsTableBody tr');
+    let tableHTML = '';
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 2) return;
+        tableHTML += '<tr>';
+        cells.forEach(cell => { tableHTML += `<td>${cell.innerText.trim()}</td>`; });
+        tableHTML += '</tr>';
+    });
+
+    const now = new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
+
+    const printContent = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>${title}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; color: #222; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        .meta { font-size: 12px; color: #666; margin-bottom: 18px; }
+        .summary { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .stat { background: #eef6ff; border-radius: 6px; padding: 10px 16px; min-width: 130px; }
+        .stat-label { font-size: 11px; color: #555; margin-bottom: 2px; }
+        .stat-value { font-size: 15px; font-weight: bold; white-space: pre-line; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+        th { background: #1a6faf; color: #fff; padding: 8px 6px; text-align: left; }
+        td { padding: 7px 6px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
+        tr:nth-child(even) td { background: #f7faff; }
+        @media print { body { margin: 0; } button { display: none; } }
+    </style>
+</head>
+<body>
+    <h1>GenTrisBest &mdash; ${title}</h1>
+    <div class="meta">Printed on ${now} &nbsp;|&nbsp; ${orderCount}</div>
+    <div class="summary">
+        <div class="stat"><div class="stat-label">Total Revenue</div><div class="stat-value">${revenue}</div></div>
+        <div class="stat"><div class="stat-label">Total Orders</div><div class="stat-value">${ordersCount}</div></div>
+        <div class="stat"><div class="stat-label">Units Sold</div><div class="stat-value">${units}</div></div>
+        <div class="stat"><div class="stat-label">Avg Order Value</div><div class="stat-value">${avg}</div></div>
+    </div>
+    <table>
+        <thead>
+            <tr><th>Order #</th><th>Customer</th><th>Product</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Payment</th><th>Date</th><th>Status</th></tr>
+        </thead>
+        <tbody>${tableHTML || '<tr><td colspan="9" style="text-align:center;color:#999;padding:16px;">No data to print.</td></tr>'}</tbody>
+    </table>
+</body>
+</html>`;
+
+    const pw = window.open('', '_blank', 'width=960,height=720');
+    pw.document.write(printContent);
+    pw.document.close();
+    pw.focus();
+    setTimeout(() => pw.print(), 400);
+}
+
 // Store all products for search functionality
 let allProducts = [];
+
+function previewProductImage(src, name) {
+    document.getElementById('imagePreviewImg').src = src;
+    document.getElementById('imagePreviewTitle').textContent = name;
+    new bootstrap.Modal(document.getElementById('imagePreviewModal')).show();
+}
 
 function loadInventory() {
     fetch('inventory_api.php?action=get_all_products')
@@ -5320,8 +5465,13 @@ function displayProductsTable(products) {
             row.style.borderLeft = '4px solid #ffc107';
         }
         
+        const escapedName = product.ProductName.replace(/'/g, "\\'");
+        const thumbHtml = product.ImagePath
+            ? `<img src="${product.ImagePath}" alt="" onclick="previewProductImage('${product.ImagePath}','${escapedName}')" style="width:36px;height:36px;object-fit:cover;border-radius:4px;margin-right:8px;vertical-align:middle;cursor:pointer;" title="Click to preview">`
+            : `<span class="me-2" style="display:inline-block;width:36px;height:36px;background:#e9ecef;border-radius:4px;vertical-align:middle;"></span>`;
+        const escapedImagePath = (product.ImagePath || '').replace(/'/g, "\\'");
         row.innerHTML = `
-            <td><strong>${product.ProductName}</strong></td>
+            <td>${thumbHtml}<strong>${product.ProductName}</strong></td>
             <td>${product.Category || 'N/A'}</td>
             <td>₱${parseFloat(product.Price).toFixed(2)}</td>
             <td>${wholesalePriceDisplay}</td>
@@ -5336,7 +5486,7 @@ function displayProductsTable(products) {
             </td>
             <td>
                 <div class="btn-group btn-group-sm" role="group">
-                    <button class="btn btn-info" onclick="editProduct(${product.ProductID}, '${product.ProductName}', '${product.Category || ''}', '${product.Description || ''}', ${product.Price}, ${product.WholesalePrice || 'null'}, ${product.Quantity})">
+                    <button class="btn btn-info" onclick="editProduct(${product.ProductID}, '${product.ProductName}', '${product.Category || ''}', '${product.Description || ''}', ${product.Price}, ${product.WholesalePrice || 'null'}, ${product.Quantity}, '${escapedImagePath}')">
                         <i class="fa-solid fa-edit me-1"></i>Edit
                     </button>
                     <button class="btn btn-danger" onclick="deleteProduct(${product.ProductID}, '${product.ProductName}')">
@@ -5434,7 +5584,11 @@ function handleAddProduct() {
     formData.append('price', price);
     formData.append('wholesalePrice', wholesalePrice);
     formData.append('quantity', quantity);
-    
+    const imageInput = document.getElementById('productImage');
+    if (imageInput && imageInput.files[0]) {
+        formData.append('productImage', imageInput.files[0]);
+    }
+
     fetch('inventory_api.php', {
         method: 'POST',
         body: formData
@@ -5448,6 +5602,8 @@ function handleAddProduct() {
                 'bg-success',
                 [{text: 'Close', class: 'btn btn-success', dataDismiss: true, onclick: () => {
                     document.getElementById('addProductForm').reset();
+                    const preview = document.getElementById('productImagePreview');
+                    if (preview) preview.style.display = 'none';
                     setTimeout(loadInventory, 500);
                 }}]
             );
@@ -5465,17 +5621,27 @@ function handleAddProduct() {
     });
 }
 
-function editProduct(productId, productName, category, description, price, wholesalePrice, quantity) {
+function editProduct(productId, productName, category, description, price, wholesalePrice, quantity, imagePath) {
     const modal = document.getElementById('adminModal');
     const modalHeader = document.getElementById('modalHeader');
     const modalTitle = document.getElementById('adminModalLabel');
     const modalBody = document.getElementById('modalBody');
     const modalFooter = document.getElementById('modalFooter');
-    
+
     // Set header
     modalHeader.className = 'modal-header bg-info text-white';
     modalTitle.textContent = 'Edit Product';
-    
+
+    const currentImageHtml = imagePath
+        ? `<div id="editCurrentImageWrap" class="mb-2">
+               <img src="${imagePath}" alt="Current image" class="img-thumbnail" style="max-height:100px;">
+               <div class="form-check mt-1">
+                   <input class="form-check-input" type="checkbox" id="removeProductImage">
+                   <label class="form-check-label text-danger small" for="removeProductImage">Remove current image</label>
+               </div>
+           </div>`
+        : '';
+
     // Create form content
     modalBody.innerHTML = `
         <form id="editProductForm">
@@ -5506,19 +5672,39 @@ function editProduct(productId, productName, category, description, price, whole
                 <small class="text-muted d-block mb-2">Applied when customer has 10+ orders</small>
                 <input type="number" class="form-control" id="editProductWholesalePrice" value="${wholesalePrice || ''}" step="0.01">
             </div>
+            <div class="mb-3">
+                <label class="form-label fw-medium">Product Image</label>
+                ${currentImageHtml}
+                <input type="file" class="form-control" id="editProductImage" accept="image/jpeg,image/png,image/gif,image/webp">
+                <div id="editImagePreview" class="mt-2" style="display:none;">
+                    <img id="editImagePreviewImg" src="" alt="New image preview" class="img-thumbnail" style="max-height:100px;">
+                </div>
+            </div>
         </form>
     `;
-    
+
+    // Wire up new image preview
+    document.getElementById('editProductImage').addEventListener('change', function() {
+        const preview = document.getElementById('editImagePreview');
+        const previewImg = document.getElementById('editImagePreviewImg');
+        if (this.files && this.files[0]) {
+            previewImg.src = URL.createObjectURL(this.files[0]);
+            preview.style.display = 'block';
+        } else {
+            preview.style.display = 'none';
+        }
+    });
+
     // Set footer buttons
     modalFooter.innerHTML = `
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-info" id="confirmEditBtn">Save Changes</button>
     `;
-    
+
     // Show modal
     const bootstrapModal = new bootstrap.Modal(modal);
     bootstrapModal.show();
-    
+
     // Handle edit button click
     document.getElementById('confirmEditBtn').onclick = function() {
         const editedName = document.getElementById('editProductName').value.trim();
@@ -5527,20 +5713,22 @@ function editProduct(productId, productName, category, description, price, whole
         const editedPrice = document.getElementById('editProductPrice').value;
         const editedWholesalePrice = document.getElementById('editProductWholesalePrice').value;
         const editedQuantity = document.getElementById('editProductQuantity').value;
-        
+        const newImageFile = document.getElementById('editProductImage').files[0] || null;
+        const removeImage = document.getElementById('removeProductImage') && document.getElementById('removeProductImage').checked;
+
         if (!editedName || !editedPrice || editedQuantity === '') {
             showModal('Validation Error', 'Please fill in all required fields', 'bg-warning', [
                 {text: 'Ok', class: 'btn btn-warning', dataDismiss: true}
             ]);
             return;
         }
-        
+
         bootstrapModal.hide();
-        performUpdateProduct(productId, editedName, editedCategory, editedDescription, editedPrice, editedWholesalePrice, editedQuantity);
+        performUpdateProduct(productId, editedName, editedCategory, editedDescription, editedPrice, editedWholesalePrice, editedQuantity, newImageFile, removeImage);
     };
 }
 
-function performUpdateProduct(productId, productName, category, description, price, wholesalePrice, quantity) {
+function performUpdateProduct(productId, productName, category, description, price, wholesalePrice, quantity, imageFile, removeImage) {
     const formData = new FormData();
     formData.append('action', 'update_product');
     formData.append('productId', productId);
@@ -5550,6 +5738,11 @@ function performUpdateProduct(productId, productName, category, description, pri
     formData.append('price', price);
     formData.append('wholesalePrice', wholesalePrice);
     formData.append('quantity', quantity);
+    if (imageFile) {
+        formData.append('productImage', imageFile);
+    } else if (removeImage) {
+        formData.append('removeImage', '1');
+    }
     
     fetch('inventory_api.php', {
         method: 'POST',

@@ -23,6 +23,10 @@ if ($conn === false) {
     exit();
 }
 
+// Add ImagePath column if it doesn't exist yet
+$migrateSql = "IF NOT EXISTS (SELECT * FROM sys.columns WHERE Name = N'ImagePath' AND Object_ID = Object_ID(N'Products')) ALTER TABLE Products ADD ImagePath NVARCHAR(500) NULL";
+sqlsrv_query($conn, $migrateSql);
+
 // Get current user's account type
 $username = $_SESSION['username'];
 $checkUserSql = "SELECT AccountType FROM Users WHERE Username = ?";
@@ -42,7 +46,7 @@ $action = isset($_GET['action']) ? $_GET['action'] : (isset($_POST['action']) ? 
 
 if ($action === 'get_all_products') {
     // Fetch all products
-    $sql = "SELECT ProductID, ProductName, Category, Description, Price, WholesalePrice, Quantity, Status, DateAdded, AddedBy FROM Products ORDER BY DateAdded DESC";
+    $sql = "SELECT ProductID, ProductName, Category, Description, Price, WholesalePrice, Quantity, Status, DateAdded, AddedBy, ImagePath FROM Products ORDER BY DateAdded DESC";
     $result = sqlsrv_query($conn, $sql);
     
     if ($result === false) {
@@ -71,22 +75,40 @@ if ($action === 'get_all_products') {
     $price = isset($_POST['price']) ? floatval($_POST['price']) : null;
     $wholesalePrice = isset($_POST['wholesalePrice']) ? floatval($_POST['wholesalePrice']) : null;
     $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : null;
-    
+
     // Validate required fields
     if (!$productName || $price === null || $quantity === null) {
         echo json_encode(['success' => false, 'error' => 'Missing required fields: productName, price, quantity']);
         exit();
     }
-    
+
     if ($price < 0 || $quantity < 0 || ($wholesalePrice !== null && $wholesalePrice < 0)) {
         echo json_encode(['success' => false, 'error' => 'Price and quantity must be non-negative']);
         exit();
     }
-    
-    $insertSql = "INSERT INTO Products (ProductName, Category, Description, Price, WholesalePrice, Quantity, Status, AddedBy, ModifiedBy) 
-                   VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?)";
-    $insertParams = array($productName, $category, $description, $price, $wholesalePrice, $quantity, $username, $username);
-    
+
+    // Handle optional image upload
+    $imagePath = null;
+    if (isset($_FILES['productImage']) && $_FILES['productImage']['error'] === UPLOAD_ERR_OK) {
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $fileType = mime_content_type($_FILES['productImage']['tmp_name']);
+        if (!in_array($fileType, $allowedTypes)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid image type. Allowed: jpg, png, gif, webp']);
+            exit();
+        }
+        $ext = pathinfo($_FILES['productImage']['name'], PATHINFO_EXTENSION);
+        $filename = uniqid('product_') . '.' . strtolower($ext);
+        $uploadDir = __DIR__ . '/uploads/product_images/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+        if (move_uploaded_file($_FILES['productImage']['tmp_name'], $uploadDir . $filename)) {
+            $imagePath = 'uploads/product_images/' . $filename;
+        }
+    }
+
+    $insertSql = "INSERT INTO Products (ProductName, Category, Description, Price, WholesalePrice, Quantity, Status, AddedBy, ModifiedBy, ImagePath)
+                   VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)";
+    $insertParams = array($productName, $category, $description, $price, $wholesalePrice, $quantity, $username, $username, $imagePath);
+
     if (sqlsrv_query($conn, $insertSql, $insertParams)) {
         echo json_encode(['success' => true, 'message' => 'Product added successfully']);
     } else {
@@ -108,21 +130,65 @@ if ($action === 'get_all_products') {
     $price = isset($_POST['price']) ? floatval($_POST['price']) : null;
     $wholesalePrice = isset($_POST['wholesalePrice']) ? floatval($_POST['wholesalePrice']) : null;
     $quantity = isset($_POST['quantity']) ? intval($_POST['quantity']) : null;
-    
+
     // Validate required fields
     if (!$productId || !$productName || $price === null || $quantity === null) {
         echo json_encode(['success' => false, 'error' => 'Missing required fields']);
         exit();
     }
-    
+
     if ($price < 0 || $quantity < 0 || ($wholesalePrice !== null && $wholesalePrice < 0)) {
         echo json_encode(['success' => false, 'error' => 'Price and quantity must be non-negative']);
         exit();
     }
-    
-    $updateSql = "UPDATE Products SET ProductName = ?, Category = ?, Description = ?, Price = ?, WholesalePrice = ?, Quantity = ?, ModifiedBy = ?, LastModified = GETDATE() WHERE ProductID = ?";
-    $updateParams = array($productName, $category, $description, $price, $wholesalePrice, $quantity, $username, $productId);
-    
+
+    // Handle optional image upload or removal
+    $imagePathSql = '';
+    $imagePathParam = null;
+    $updateImage = false;
+    if (!empty($_POST['removeImage'])) {
+        $getOldSql = "SELECT ImagePath FROM Products WHERE ProductID = ?";
+        $oldResult = sqlsrv_query($conn, $getOldSql, array($productId));
+        if ($oldResult && ($oldRow = sqlsrv_fetch_array($oldResult, SQLSRV_FETCH_ASSOC))) {
+            if ($oldRow['ImagePath']) {
+                $oldFile = __DIR__ . '/' . $oldRow['ImagePath'];
+                if (file_exists($oldFile)) unlink($oldFile);
+            }
+        }
+        $imagePathSql = ', ImagePath = ?';
+        $imagePathParam = null;
+        $updateImage = true;
+    } elseif (isset($_FILES['productImage']) && $_FILES['productImage']['error'] === UPLOAD_ERR_OK) {
+        $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        $fileType = mime_content_type($_FILES['productImage']['tmp_name']);
+        if (!in_array($fileType, $allowedTypes)) {
+            echo json_encode(['success' => false, 'error' => 'Invalid image type. Allowed: jpg, png, gif, webp']);
+            exit();
+        }
+        $ext = pathinfo($_FILES['productImage']['name'], PATHINFO_EXTENSION);
+        $filename = uniqid('product_') . '.' . strtolower($ext);
+        $uploadDir = __DIR__ . '/uploads/product_images/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+        if (move_uploaded_file($_FILES['productImage']['tmp_name'], $uploadDir . $filename)) {
+            $getOldSql = "SELECT ImagePath FROM Products WHERE ProductID = ?";
+            $oldResult = sqlsrv_query($conn, $getOldSql, array($productId));
+            if ($oldResult && ($oldRow = sqlsrv_fetch_array($oldResult, SQLSRV_FETCH_ASSOC))) {
+                if ($oldRow['ImagePath']) {
+                    $oldFile = __DIR__ . '/' . $oldRow['ImagePath'];
+                    if (file_exists($oldFile)) unlink($oldFile);
+                }
+            }
+            $imagePathSql = ', ImagePath = ?';
+            $imagePathParam = 'uploads/product_images/' . $filename;
+            $updateImage = true;
+        }
+    }
+
+    $updateSql = "UPDATE Products SET ProductName = ?, Category = ?, Description = ?, Price = ?, WholesalePrice = ?, Quantity = ?, ModifiedBy = ?, LastModified = GETDATE(){$imagePathSql} WHERE ProductID = ?";
+    $updateParams = array($productName, $category, $description, $price, $wholesalePrice, $quantity, $username);
+    if ($updateImage) $updateParams[] = $imagePathParam;
+    $updateParams[] = $productId;
+
     if (sqlsrv_query($conn, $updateSql, $updateParams)) {
         echo json_encode(['success' => true, 'message' => 'Product updated successfully']);
     } else {
