@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GenTri's Best | Dashboard</title>
+    <title>Dairy Box Gentri | Dashboard</title>
     <link rel="icon" type="Images/png" href="Images/logo1.jpg">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     
@@ -366,6 +366,11 @@
                         <li class="nav-item" id="logsNavItem" style="display: none;">
                             <a class="nav-link" href="#" onclick="showSection('logs'); loadActivityLogs()">
                                 <i class="fa-solid fa-clipboard-list"></i> Activity Logs
+                            </a>
+                        </li>
+                        <li class="nav-item" id="dbNavItem" style="display: none;">
+                            <a class="nav-link" href="#" onclick="showSection('db'); loadDatabase()">
+                                <i class="fa-solid fa-database"></i> Database
                             </a>
                         </li>
                     </ul>
@@ -892,13 +897,55 @@
                     </div>
                 </section>
 
+                <!-- Database Viewer Section (Admin only) -->
+                <section id="dbSection" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-dark text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+                            <h5 class="mb-0"><i class="fa-solid fa-database me-2"></i>Database Viewer</h5>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <select class="form-select form-select-sm" id="dbTableSelect" onchange="loadTableData(this.value, 1)" style="width: auto; min-width: 190px;">
+                                    <option value="">— Select a table —</option>
+                                </select>
+                                <input type="text" class="form-control form-control-sm" id="dbSearch" placeholder="Search rows..." style="width: 180px;" oninput="dbSearchDebounce()">
+                                <button class="btn btn-sm btn-outline-light" onclick="clearDBSearch()" title="Clear search">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                                <span class="badge bg-secondary" id="dbRowCount">— rows</span>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive" style="max-height: 540px; overflow-y: auto;">
+                                <table class="table table-hover table-sm mb-0" id="dbTable">
+                                    <thead class="table-dark sticky-top" id="dbTableHead">
+                                        <tr>
+                                            <th class="text-center text-muted py-3 fw-normal" colspan="1">Select a table above to view its data.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="dbTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <small class="text-muted" id="dbPaginationInfo"></small>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" id="dbPrevBtn" onclick="dbChangePage(-1)" disabled>
+                                    <i class="fa-solid fa-chevron-left"></i> Prev
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="dbNextBtn" onclick="dbChangePage(1)" disabled>
+                                    Next <i class="fa-solid fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <div class="flex-grow-1"></div>
 
                 
                 <footer
                     class="d-flex flex-wrap justify-content-between align-items-center py-4 mt-auto border-top text-muted small rounded-3 p-3 shadow-sm" style="background-color: var(--card-bg); transition: background-color 0.3s, border-color 0.3s;">
                     <div class="col-md-4 d-flex align-items-center">
-                        <span class="mb-3 mb-md-0 fw-medium">&copy; 2026 GenTri's Best. All rights reserved.</span>
+                        <span class="mb-3 mb-md-0 fw-medium">&copy; 2026 Dairy Box Gentri. All rights reserved.</span>
                     </div>
 
                     <ul class="nav col-md-8 justify-content-end list-unstyled d-flex flex-wrap gap-3">

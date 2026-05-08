@@ -311,6 +311,7 @@ function displayUserData(userData) {
     const posTab = document.getElementById('posNavItem');
     const cartNavItem = document.getElementById('cartNavItem');
     const logsNavItem = document.getElementById('logsNavItem');
+    const dbNavItem = document.getElementById('dbNavItem');
 
     if (isGuest) {
         // Hide all restricted tabs for guests
@@ -321,6 +322,7 @@ function displayUserData(userData) {
         if (posTab) posTab.style.display = 'none';
         if (cartNavItem) cartNavItem.style.display = 'none';
         if (logsNavItem) logsNavItem.style.display = 'none';
+        if (dbNavItem) dbNavItem.style.display = 'none';
     } else {
         // Show tabs for authenticated users based on their role
         // Reports tab is visible only to ADMIN, INVENTORY, MANAGER
@@ -333,12 +335,14 @@ function displayUserData(userData) {
         
         if (analyticsNavItem) analyticsNavItem.style.display = 'block';
         
-        // Show admin tab and logs tab if user is admin
+        // Show admin, logs, and DB tabs if user is admin
         if (userData.accountType === 'ADMIN') {
             if (adminTab) adminTab.style.display = 'block';
             if (logsNavItem) logsNavItem.style.display = 'block';
+            if (dbNavItem) dbNavItem.style.display = 'block';
         } else {
             if (logsNavItem) logsNavItem.style.display = 'none';
+            if (dbNavItem) dbNavItem.style.display = 'none';
         }
 
         // Show inventory tab if user has inventory access (ADMIN, INVENTORY, MANAGER, FRONT DESK)
@@ -5403,6 +5407,128 @@ function printReport() {
     pw.document.close();
     pw.focus();
     setTimeout(() => pw.print(), 400);
+}
+
+// ============================================
+// DATABASE VIEWER FUNCTIONS (Admin only)
+// ============================================
+
+let dbCurrentTable = '';
+let dbCurrentPage  = 1;
+let dbTotalPages   = 1;
+let dbSearchTimer  = null;
+
+function loadDatabase() {
+    fetch('db_api.php?action=get_tables')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+            const select = document.getElementById('dbTableSelect');
+            select.innerHTML = '<option value="">— Select a table —</option>';
+            data.tables.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                opt.textContent = t;
+                select.appendChild(opt);
+            });
+            if (dbCurrentTable) {
+                select.value = dbCurrentTable;
+                loadTableData(dbCurrentTable, dbCurrentPage);
+            }
+        })
+        .catch(() => {});
+}
+
+function loadTableData(tableName, page) {
+    if (!tableName) return;
+    dbCurrentTable = tableName;
+    dbCurrentPage  = page;
+
+    const search  = (document.getElementById('dbSearch').value || '').trim();
+    const tbody   = document.getElementById('dbTableBody');
+    const thead   = document.getElementById('dbTableHead');
+
+    tbody.innerHTML = `<tr><td colspan="99" class="text-center text-muted py-4"><i class="fa-solid fa-spinner fa-spin me-2"></i>Loading...</td></tr>`;
+    thead.innerHTML = '';
+
+    const params = new URLSearchParams({ action: 'get_table_data', table: tableName, page, search });
+    fetch(`db_api.php?${params}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                tbody.innerHTML = `<tr><td colspan="99" class="text-center text-danger py-4">${data.error}</td></tr>`;
+                return;
+            }
+
+            dbTotalPages = data.totalPages || 1;
+
+            document.getElementById('dbRowCount').textContent     = `${data.total} row${data.total !== 1 ? 's' : ''}`;
+            document.getElementById('dbPaginationInfo').textContent = data.total > 0
+                ? `Page ${data.page} of ${dbTotalPages} · ${data.total} total rows · 50 per page`
+                : '';
+            document.getElementById('dbPrevBtn').disabled = page <= 1;
+            document.getElementById('dbNextBtn').disabled = page >= dbTotalPages;
+
+            // Header
+            const headerRow = document.createElement('tr');
+            data.columns.forEach(col => {
+                const th = document.createElement('th');
+                th.textContent = col;
+                th.style.whiteSpace = 'nowrap';
+                headerRow.appendChild(th);
+            });
+            thead.innerHTML = '';
+            thead.appendChild(headerRow);
+
+            // Body
+            tbody.innerHTML = '';
+            if (data.rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="${data.columns.length}" class="text-center text-muted py-4"><i class="fa-solid fa-inbox me-2"></i>No rows found.</td></tr>`;
+                return;
+            }
+
+            data.rows.forEach(row => {
+                const tr = document.createElement('tr');
+                data.columns.forEach(col => {
+                    const td = document.createElement('td');
+                    const val = row[col];
+                    if (val === null || val === undefined) {
+                        td.innerHTML = '<span class="text-muted fst-italic" style="font-size:0.8em;">NULL</span>';
+                    } else {
+                        td.textContent = String(val);
+                    }
+                    td.style.maxWidth    = '260px';
+                    td.style.overflow    = 'hidden';
+                    td.style.textOverflow = 'ellipsis';
+                    td.style.whiteSpace  = 'nowrap';
+                    td.title = val !== null && val !== undefined ? String(val) : 'NULL';
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+        })
+        .catch(() => {
+            tbody.innerHTML = '<tr><td colspan="99" class="text-center text-danger py-4">Failed to load data.</td></tr>';
+        });
+}
+
+function dbChangePage(delta) {
+    const next = dbCurrentPage + delta;
+    if (next < 1 || next > dbTotalPages) return;
+    loadTableData(dbCurrentTable, next);
+}
+
+function dbSearchDebounce() {
+    clearTimeout(dbSearchTimer);
+    dbSearchTimer = setTimeout(() => {
+        if (dbCurrentTable) loadTableData(dbCurrentTable, 1);
+    }, 400);
+}
+
+function clearDBSearch() {
+    const el = document.getElementById('dbSearch');
+    if (el) el.value = '';
+    if (dbCurrentTable) loadTableData(dbCurrentTable, 1);
 }
 
 // Store all products for search functionality
