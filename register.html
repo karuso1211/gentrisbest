@@ -72,6 +72,11 @@
         .input-group-text i {
             color: var(--sky-blue);
         }
+        input[type="password"]::-ms-reveal,
+        input[type="password"]::-ms-clear { display: none; }
+
+        #pwRequirements,
+        #confirmMsg { display: none; }
     </style>
 </head>
 
@@ -136,20 +141,33 @@
             </div>
 
             <!-- Password -->
-            <div class="input-group mb-3 shadow-sm rounded">
+            <div class="input-group mb-1 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-lock text-sky"></i></span>
                 <input type="password" id="password" name="password"
                     class="form-control border-start-0 border-end-0 ps-0 pe-0" placeholder="Password" required
-                    autocomplete="off">    
+                    autocomplete="off">
+                <span class="input-group-text bg-white border-start-0 text-sky" id="toggleRegPasswordBtn" role="button" style="cursor:pointer" tabindex="-1">
+                    <i class="fa-solid fa-eye fa-sm" id="toggleRegPasswordIcon"></i>
+                </span>
             </div>
+            <!-- Password requirements -->
+            <ul id="pwRequirements" class="list-unstyled small mb-3 ps-1">
+                <li id="req-length"  class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i>At least 8 characters</li>
+                <li id="req-upper"   class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i>At least 1 uppercase letter</li>
+                <li id="req-special" class="text-danger"><i class="fa-solid fa-circle-xmark me-1"></i>At least 1 special character</li>
+            </ul>
 
             <!-- Confirm Password -->
-            <div class="input-group mb-3 shadow-sm rounded">
+            <div class="input-group mb-1 shadow-sm rounded">
                 <span class="input-group-text bg-white border-end-0"><i class="fa-solid fa-lock"></i></span>
                 <input type="password" id="confirmPassword" name="confirmPassword"
-                    class="form-control border-start-0 ps-0" placeholder="Confirm Password" required
+                    class="form-control border-start-0 border-end-0 ps-0" placeholder="Confirm Password" required
                     autocomplete="off">
+                <span class="input-group-text bg-white border-start-0 text-sky" id="toggleConfirmPasswordBtn" role="button" style="cursor:pointer" tabindex="-1">
+                    <i class="fa-solid fa-eye fa-sm" id="toggleConfirmPasswordIcon"></i>
+                </span>
             </div>
+            <p id="confirmMsg" class="small mb-3 ps-1"></p>
 
 
 
@@ -168,39 +186,103 @@
 
     <script src="app.js"></script>
     <script>
+        // Password visibility toggles
+        function setupToggle(btnId, inputId, iconId) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const input = document.getElementById(inputId);
+                const icon  = document.getElementById(iconId);
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.classList.replace('fa-eye', 'fa-eye-slash');
+                } else {
+                    input.type = 'password';
+                    icon.classList.replace('fa-eye-slash', 'fa-eye');
+                }
+            });
+        }
+
         // Registration Form Validation
         document.addEventListener('DOMContentLoaded', function() {
+            setupToggle('toggleRegPasswordBtn', 'password', 'toggleRegPasswordIcon');
+            setupToggle('toggleConfirmPasswordBtn', 'confirmPassword', 'toggleConfirmPasswordIcon');
+
+            const pwInput      = document.getElementById('password');
+            const confirmInput = document.getElementById('confirmPassword');
+            const reqList      = document.getElementById('pwRequirements');
+            const confirmMsg   = document.getElementById('confirmMsg');
+
+            function setReq(id, met) {
+                const el = document.getElementById(id);
+                const icon = el.querySelector('i');
+                if (met) {
+                    el.className = 'text-success';
+                    icon.className = 'fa-solid fa-circle-check me-1';
+                } else {
+                    el.className = 'text-danger';
+                    icon.className = 'fa-solid fa-circle-xmark me-1';
+                }
+            }
+
+            pwInput.addEventListener('input', function() {
+                const val = pwInput.value;
+                reqList.style.display = val.length ? 'block' : 'none';
+                setReq('req-length',  val.length >= 8);
+                setReq('req-upper',   /[A-Z]/.test(val));
+                setReq('req-special', /[^A-Za-z0-9]/.test(val));
+                if (confirmInput.value) updateConfirmMsg();
+            });
+
+            function updateConfirmMsg() {
+                const match = pwInput.value === confirmInput.value;
+                confirmMsg.style.display = confirmInput.value.length ? 'block' : 'none';
+                if (match) {
+                    confirmMsg.className = 'small mb-3 ps-1 text-success';
+                    confirmMsg.innerHTML = '<i class="fa-solid fa-circle-check me-1"></i>Passwords match';
+                } else {
+                    confirmMsg.className = 'small mb-3 ps-1 text-danger';
+                    confirmMsg.innerHTML = '<i class="fa-solid fa-circle-xmark me-1"></i>Passwords do not match';
+                }
+            }
+
+            confirmInput.addEventListener('input', updateConfirmMsg);
+
             const registerForm = document.getElementById('registerForm');
             if (registerForm) {
                 registerForm.addEventListener('submit', function(e) {
                     e.preventDefault();
-                    
-                    const password = document.getElementById('password').value;
-                    const confirmPassword = document.getElementById('confirmPassword').value;
-                    const errorBox = document.getElementById('errorBox');
-                    const successBox = document.getElementById('successBox');
-                    
-                    // Hide previous alerts
+
+                    const password = pwInput.value;
+                    const confirmPassword = confirmInput.value;
+                    const errorBox  = document.getElementById('errorBox');
+                    const errorText = document.getElementById('errorText');
+
                     errorBox.classList.add('d-none');
                     errorBox.classList.remove('d-flex');
-                    successBox.classList.add('d-none');
-                    successBox.classList.remove('d-flex');
-                    
-                    // Validate passwords match
-                    if (password !== confirmPassword) {
-                        const errorText = document.getElementById('errorText');
-                        errorText.textContent = 'Passwords do not match.';
-                        errorBox.classList.remove('d-none');
-                        errorBox.classList.add('d-flex');
+
+                    if (password.length < 8 || !/[A-Z]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+                        reqList.style.display = 'block';
+                        setReq('req-length',  password.length >= 8);
+                        setReq('req-upper',   /[A-Z]/.test(password));
+                        setReq('req-special', /[^A-Za-z0-9]/.test(password));
+                        pwInput.focus();
                         return false;
                     }
-                    
-                    // If validation passes, submit the form
+
+                    if (password !== confirmPassword) {
+                        updateConfirmMsg();
+                        confirmInput.focus();
+                        return false;
+                    }
+
                     registerForm.submit();
                 });
             }
         });
     </script>
+    <script src="transitions.js"></script>
 </body>
 
 </html>

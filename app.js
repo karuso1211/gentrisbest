@@ -56,6 +56,12 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Load browse products on dashboard load
         loadBrowseProducts();
+
+        // Pre-load current user's reviews so Rate/Reviewed buttons render correctly
+        loadMyReviews();
+
+        // Pre-load top-5 best seller IDs so browse product badges render correctly
+        loadBestSellerIds();
         
         // Setup inventory form listener
 
@@ -117,19 +123,37 @@ function handleLogin() {
             'Content-Type': 'application/x-www-form-urlencoded',
         },
         credentials: 'include', // Include cookies for session
-        body: 'username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password)
+        body: 'username=' + encodeURIComponent(username) + '&password=' + encodeURIComponent(password) + '&loginType=' + encodeURIComponent((document.getElementById('loginType') || {value:'user'}).value)
     })
-    .then(response => {
+    .then(function(response) {
         console.log('Login response status:', response.status);
-        return response.json();
+        return response.text();
     })
-    .then(data => {
+    .then(function(text) {
+        var data;
+        try {
+            data = JSON.parse(text);
+        } catch(e) {
+            console.error('JSON parse failed. Raw response:', text);
+            throw new Error('Server returned invalid response. Check PHP logs.');
+        }
         console.log('Login response data:', data);
-        if (data.success) {
+        if (data.otpRequired) {
+            window.__otpTempToken = data.tempToken;
+            window.__otpUsername  = username;
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+            try {
+                showOtpModal();
+            } catch(e) {
+                console.error('showOtpModal error:', e);
+                showError('Could not open verification prompt. Please refresh and try again.');
+            }
+        } else if (data.success) {
             console.log('Login successful, fetching user data...');
             // Store username in sessionStorage as backup
             sessionStorage.setItem('username', username);
-            
+
             // Fetch user data right after login to verify session
             fetch('get_user_data.php', {
                 method: 'GET',
@@ -170,6 +194,93 @@ function handleLogin() {
         showError('An error occurred during login. Please try again.');
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
+    });
+}
+
+// ============================================
+// OTP VERIFICATION
+// ============================================
+let otpCountdownInterval = null;
+
+function showOtpModal() {
+    document.getElementById('otpInput').value = '';
+    document.getElementById('otpErrorText').textContent = '';
+    document.getElementById('otpErrorBox').classList.add('d-none');
+    document.getElementById('otpResendMsg').classList.add('d-none');
+    document.getElementById('otpSubmitBtn').disabled = false;
+    document.getElementById('otpSubmitBtn').innerHTML = '<i class="fa-solid fa-shield-check me-2"></i>Verify Code';
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('otpModal'));
+    modal.show();
+    document.getElementById('otpInput').focus();
+    startOtpCountdown(600);
+}
+
+function startOtpCountdown(seconds) {
+    clearInterval(otpCountdownInterval);
+    const timerEl = document.getElementById('otpTimer');
+    otpCountdownInterval = setInterval(function() {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        timerEl.textContent = m + ':' + String(s).padStart(2, '0');
+        if (seconds <= 0) {
+            clearInterval(otpCountdownInterval);
+            timerEl.textContent = 'Expired';
+            document.getElementById('otpSubmitBtn').disabled = true;
+            document.getElementById('otpResendMsg').classList.remove('d-none');
+        }
+        seconds--;
+    }, 1000);
+}
+
+function submitOtp() {
+    const otp    = document.getElementById('otpInput').value.trim();
+    const otpBtn = document.getElementById('otpSubmitBtn');
+    const otpErrorBox  = document.getElementById('otpErrorBox');
+    const otpErrorText = document.getElementById('otpErrorText');
+
+    if (!/^\d{6}$/.test(otp)) {
+        otpErrorText.textContent = 'Please enter the 6-digit code.';
+        otpErrorBox.classList.remove('d-none');
+        return;
+    }
+
+    otpBtn.disabled = true;
+    otpBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Verifying...';
+
+    fetch('verify_otp.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        credentials: 'include',
+        body: 'otp=' + encodeURIComponent(otp) + '&tempToken=' + encodeURIComponent(window.__otpTempToken || '')
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            clearInterval(otpCountdownInterval);
+            bootstrap.Modal.getInstance(document.getElementById('otpModal')).hide();
+            sessionStorage.setItem('username', window.__otpUsername || '');
+            fetch('get_user_data.php', { method: 'GET', credentials: 'include' })
+                .then(function(r) { return r.json(); })
+                .then(function(userData) {
+                    if (userData.authenticated) {
+                        sessionStorage.setItem('userData', JSON.stringify(userData));
+                        window.location.href = 'GenTrisBest_Dashboard.html';
+                    } else {
+                        showError('Session error after verification. Please log in again.');
+                    }
+                });
+        } else {
+            otpErrorText.textContent = data.error || 'Invalid code.';
+            otpErrorBox.classList.remove('d-none');
+            otpBtn.disabled = false;
+            otpBtn.innerHTML = '<i class="fa-solid fa-shield-check me-2"></i>Verify Code';
+        }
+    })
+    .catch(function() {
+        otpErrorText.textContent = 'Network error. Please try again.';
+        otpErrorBox.classList.remove('d-none');
+        otpBtn.disabled = false;
+        otpBtn.innerHTML = '<i class="fa-solid fa-shield-check me-2"></i>Verify Code';
     });
 }
 
@@ -312,6 +423,8 @@ function displayUserData(userData) {
     const cartNavItem = document.getElementById('cartNavItem');
     const logsNavItem = document.getElementById('logsNavItem');
     const dbNavItem = document.getElementById('dbNavItem');
+    const reviewsNavItem = document.getElementById('reviewsNavItem');
+    const bestSellingNavItem = document.getElementById('bestSellingNavItem');
 
     if (isGuest) {
         // Hide all restricted tabs for guests
@@ -323,6 +436,8 @@ function displayUserData(userData) {
         if (cartNavItem) cartNavItem.style.display = 'none';
         if (logsNavItem) logsNavItem.style.display = 'none';
         if (dbNavItem) dbNavItem.style.display = 'none';
+        if (reviewsNavItem) reviewsNavItem.style.display = 'none';
+        if (bestSellingNavItem) bestSellingNavItem.style.display = 'none';
     } else {
         // Show tabs for authenticated users based on their role
         // Reports tab is visible only to ADMIN, INVENTORY, MANAGER
@@ -332,9 +447,9 @@ function displayUserData(userData) {
         } else {
             if (reportsNavItem) reportsNavItem.style.display = 'none';
         }
-        
+
         if (analyticsNavItem) analyticsNavItem.style.display = 'block';
-        
+
         // Show admin, logs, and DB tabs if user is admin
         if (userData.accountType === 'ADMIN') {
             if (adminTab) adminTab.style.display = 'block';
@@ -343,6 +458,20 @@ function displayUserData(userData) {
         } else {
             if (logsNavItem) logsNavItem.style.display = 'none';
             if (dbNavItem) dbNavItem.style.display = 'none';
+        }
+
+        // Reviews tab visible to ADMIN and MANAGER
+        if (['ADMIN', 'MANAGER'].includes(userData.accountType)) {
+            if (reviewsNavItem) reviewsNavItem.style.display = 'block';
+        } else {
+            if (reviewsNavItem) reviewsNavItem.style.display = 'none';
+        }
+
+        // Best Selling tab visible to ADMIN, MANAGER, INVENTORY, FRONT DESK
+        if (['ADMIN', 'MANAGER', 'INVENTORY', 'FRONT DESK'].includes(userData.accountType)) {
+            if (bestSellingNavItem) bestSellingNavItem.style.display = 'block';
+        } else {
+            if (bestSellingNavItem) bestSellingNavItem.style.display = 'none';
         }
 
         // Show inventory tab if user has inventory access (ADMIN, INVENTORY, MANAGER, FRONT DESK)
@@ -704,7 +833,7 @@ function resetPassword(username, fullName) {
             <div class="mb-3">
                 <label for="newPassword" class="form-label">New Password</label>
                 <input type="text" class="form-control" id="newPassword" placeholder="Leave blank to generate random password">
-                <small class="text-muted">Minimum 4 characters. Leave blank to auto-generate secure password.</small>
+                <small class="text-muted">Min 8 chars, 1 uppercase, 1 special character. Leave blank to auto-generate.</small>
             </div>
         </form>
     `;
@@ -725,8 +854,8 @@ function resetPassword(username, fullName) {
         const password = passwordInput.trim() === '' ? generateRandomPassword() : passwordInput.trim();
         
         // Validate
-        if (password.length < 4) {
-            showModal('Error', 'Password must be at least 4 characters', 'bg-danger', [
+        if (password.length < 8 || !/[A-Z]/.test(password) || !/[^A-Za-z0-9]/.test(password)) {
+            showModal('Error', 'Password must be at least 8 characters with 1 uppercase letter and 1 special character.', 'bg-danger', [
                 {text: 'Ok', class: 'btn btn-danger', dataDismiss: true}
             ]);
             return;
@@ -860,6 +989,7 @@ function displayBrowseProducts(products) {
     products.forEach(product => {
         const isOutOfStock = product.Quantity <= 0;
         const stockClass = product.Quantity <= 5 ? 'text-danger' : 'text-success';
+        const bsRank = window.bestSellerRanks ? window.bestSellerRanks.get(parseInt(product.ProductID)) : null;
         
         // Show pricing with wholesale availability info
         let priceDisplay = '';
@@ -911,8 +1041,15 @@ function displayBrowseProducts(products) {
         const browseImgHtml = product.ImagePath
             ? `<img src="${product.ImagePath}" alt="${product.ProductName}" class="card-img-top" onclick="previewProductImage('${browseEscapedPath}','${browseEscapedName}')" style="height:160px;object-fit:cover;cursor:pointer;" title="Click to preview">`
             : `<div class="bg-light d-flex align-items-center justify-content-center" style="height:100px;"><i class="fa-solid fa-image fa-2x text-muted"></i></div>`;
+        const bsColors = ['#FFD700','#C0C0C0','#CD7F32','#f59e0b','#f59e0b'];
+        const bsBadgeHtml = bsRank
+            ? `<div style="position:absolute;top:8px;left:8px;z-index:2;background:${bsColors[bsRank-1]};color:#fff;border-radius:6px;padding:3px 8px;font-size:0.72rem;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,0.2);display:flex;align-items:center;gap:4px;">
+                  <i class="fa-solid fa-trophy"></i> #${bsRank} Best Seller
+               </div>`
+            : '';
         productCard.innerHTML = `
-            <div class="card border-0 shadow-sm h-100 ${isOutOfStock ? 'opacity-75' : ''}">
+            <div class="card border-0 shadow-sm h-100 ${isOutOfStock ? 'opacity-75' : ''}" style="position:relative;">
+                ${bsBadgeHtml}
                 ${browseImgHtml}
                 <div class="card-body product-card-body d-flex flex-column h-100">
                     <div class="d-flex justify-content-between align-items-start mb-2">
@@ -987,6 +1124,172 @@ async function geocodeAddress(address) {
         }
     } catch (_) {}
     return null;
+}
+
+// ── Shared card terminal overlay ─────────────────────────────────────────────
+function ensureCardTerminalOverlay() {
+    if (document.getElementById('cardTerminalOverlay')) return;
+    const ctEl = document.createElement('div');
+    ctEl.id = 'cardTerminalOverlay';
+    ctEl.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,0.78);z-index:1300;align-items:center;justify-content:center;';
+    ctEl.innerHTML = `
+        <div style="background:#16213e;border-radius:16px;padding:28px 24px;max-width:420px;width:90%;max-height:90vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,0.65);">
+            <div class="d-flex align-items-center mb-4">
+                <div class="rounded-circle d-flex align-items-center justify-content-center me-2" style="width:38px;height:38px;background:#ffd700;flex-shrink:0;">
+                    <i class="fa-solid fa-credit-card" style="color:#16213e;"></i>
+                </div>
+                <div>
+                    <h5 class="mb-0 fw-bold text-white">Card Payment</h5>
+                    <small style="color:#8899aa;">Secure card terminal</small>
+                </div>
+                <button type="button" id="cardTerminalClose" class="btn-close btn-close-white ms-auto"></button>
+            </div>
+            <div style="background:linear-gradient(135deg,#1e3a5f 0%,#0ea5e9 100%);border-radius:12px;padding:20px 22px;margin-bottom:20px;position:relative;overflow:hidden;">
+                <div style="position:absolute;top:-20px;right:-20px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.07);pointer-events:none;"></div>
+                <div style="position:absolute;bottom:-30px;right:30px;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,0.05);pointer-events:none;"></div>
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div style="width:36px;height:26px;background:linear-gradient(135deg,#ffd700,#ffb300);border-radius:3px;"></div>
+                    <span id="cardNetworkBadge" style="color:rgba(255,255,255,0.9);font-size:12px;font-weight:700;letter-spacing:1px;"></span>
+                </div>
+                <div style="font-family:monospace;font-size:16px;color:#fff;letter-spacing:4px;margin-bottom:14px;" id="cardNumberDisplay">•••• &nbsp;•••• &nbsp;•••• &nbsp;••••</div>
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <div style="color:rgba(255,255,255,0.55);font-size:9px;letter-spacing:1px;margin-bottom:2px;">CARDHOLDER</div>
+                        <div style="color:#fff;font-size:12px;font-weight:600;" id="cardNameDisplay">YOUR NAME</div>
+                    </div>
+                    <div class="text-end">
+                        <div style="color:rgba(255,255,255,0.55);font-size:9px;letter-spacing:1px;margin-bottom:2px;">EXPIRES</div>
+                        <div style="color:#fff;font-size:12px;font-weight:600;" id="cardExpiryDisplay">MM/YY</div>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label style="color:#8899aa;font-size:11px;letter-spacing:1px;font-weight:600;">CARD NUMBER</label>
+                <input type="text" id="cardNumberInput" class="form-control mt-1" placeholder="1234 5678 9012 3456" maxlength="19" autocomplete="cc-number"
+                    style="background:#0f1f35;border:1px solid #2a3a4a;color:#fff;font-family:monospace;letter-spacing:2px;font-size:15px;">
+            </div>
+            <div class="mb-3">
+                <label style="color:#8899aa;font-size:11px;letter-spacing:1px;font-weight:600;">CARDHOLDER NAME</label>
+                <input type="text" id="cardNameInput" class="form-control mt-1" placeholder="Name as it appears on card" autocomplete="cc-name"
+                    style="background:#0f1f35;border:1px solid #2a3a4a;color:#fff;text-transform:uppercase;">
+            </div>
+            <div class="row g-2 mb-4">
+                <div class="col-6">
+                    <label style="color:#8899aa;font-size:11px;letter-spacing:1px;font-weight:600;">EXPIRY DATE</label>
+                    <input type="text" id="cardExpiryInput" class="form-control mt-1" placeholder="MM/YY" maxlength="5" autocomplete="cc-exp"
+                        style="background:#0f1f35;border:1px solid #2a3a4a;color:#fff;letter-spacing:2px;">
+                </div>
+                <div class="col-6">
+                    <label style="color:#8899aa;font-size:11px;letter-spacing:1px;font-weight:600;">CVV</label>
+                    <input type="password" id="cardCVVInput" class="form-control mt-1" placeholder="•••" maxlength="4" autocomplete="cc-csc"
+                        style="background:#0f1f35;border:1px solid #2a3a4a;color:#fff;letter-spacing:3px;">
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" id="cardTerminalCancel" class="btn btn-outline-secondary flex-fill">Cancel</button>
+                <button type="button" id="cardTerminalConfirm" class="btn flex-fill fw-medium" style="background:#0ea5e9;border:none;color:#fff;" disabled>
+                    <i class="fa-solid fa-lock me-1"></i>Confirm Payment
+                </button>
+            </div>
+            <p class="text-center mt-3 mb-0" style="color:#445566;font-size:11px;">
+                <i class="fa-solid fa-shield-halved me-1"></i>Your details are processed securely
+            </p>
+        </div>`;
+    document.body.appendChild(ctEl);
+
+    function getCardNetwork(num) {
+        const n = num.replace(/\s/g, '');
+        if (/^4/.test(n)) return 'VISA';
+        if (/^5[1-5]/.test(n) || /^2[2-7]/.test(n)) return 'MASTERCARD';
+        if (/^3[47]/.test(n)) return 'AMEX';
+        if (/^6/.test(n)) return 'JCB / DISCOVER';
+        return '';
+    }
+
+    function refreshCardPreview() {
+        const num = document.getElementById('cardNumberInput').value;
+        const name = document.getElementById('cardNameInput').value;
+        const exp = document.getElementById('cardExpiryInput').value;
+        document.getElementById('cardNumberDisplay').textContent = num || '•••• •••• •••• ••••';
+        document.getElementById('cardNameDisplay').textContent = name.toUpperCase() || 'YOUR NAME';
+        document.getElementById('cardExpiryDisplay').textContent = exp || 'MM/YY';
+        document.getElementById('cardNetworkBadge').textContent = getCardNetwork(num);
+    }
+
+    function checkCardFormValid() {
+        const num = document.getElementById('cardNumberInput').value.replace(/\s/g, '');
+        const name = document.getElementById('cardNameInput').value.trim();
+        const exp = document.getElementById('cardExpiryInput').value;
+        const cvv = document.getElementById('cardCVVInput').value;
+        const ok = num.length >= 13 && name.length >= 2 && /^\d{2}\/\d{2}$/.test(exp) && cvv.length >= 3;
+        document.getElementById('cardTerminalConfirm').disabled = !ok;
+    }
+
+    document.getElementById('cardNumberInput').addEventListener('input', function () {
+        let v = this.value.replace(/\D/g, '').slice(0, 16);
+        this.value = v.replace(/(.{4})/g, '$1 ').trim();
+        refreshCardPreview();
+        checkCardFormValid();
+    });
+
+    document.getElementById('cardNameInput').addEventListener('input', function () {
+        this.value = this.value.replace(/[^a-zA-Z\s]/g, '').toUpperCase();
+        refreshCardPreview();
+        checkCardFormValid();
+    });
+
+    document.getElementById('cardExpiryInput').addEventListener('input', function () {
+        let v = this.value.replace(/\D/g, '').slice(0, 4);
+        if (v.length > 2) v = v.slice(0, 2) + '/' + v.slice(2);
+        this.value = v;
+        refreshCardPreview();
+        checkCardFormValid();
+    });
+
+    document.getElementById('cardCVVInput').addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 4);
+        checkCardFormValid();
+    });
+
+    document.getElementById('cardTerminalClose').onclick = () => { document.getElementById('cardTerminalOverlay').style.display = 'none'; };
+    document.getElementById('cardTerminalCancel').onclick = () => { document.getElementById('cardTerminalOverlay').style.display = 'none'; };
+}
+
+function openCardTerminal(onConfirm) {
+    ensureCardTerminalOverlay();
+    const overlay = document.getElementById('cardTerminalOverlay');
+    document.getElementById('cardNumberInput').value = '';
+    document.getElementById('cardNameInput').value = '';
+    document.getElementById('cardExpiryInput').value = '';
+    document.getElementById('cardCVVInput').value = '';
+    document.getElementById('cardNumberDisplay').textContent = '•••• •••• •••• ••••';
+    document.getElementById('cardNameDisplay').textContent = 'YOUR NAME';
+    document.getElementById('cardExpiryDisplay').textContent = 'MM/YY';
+    document.getElementById('cardNetworkBadge').textContent = '';
+    document.getElementById('cardTerminalConfirm').disabled = true;
+    overlay.style.display = 'flex';
+
+    // Bootstrap's focus trap blocks typing in overlays outside the modal — deactivate it
+    const activeModal = document.querySelector('.modal.show');
+    const modalInstance = activeModal ? bootstrap.Modal.getInstance(activeModal) : null;
+    if (modalInstance && modalInstance._focustrap) modalInstance._focustrap.deactivate();
+    setTimeout(() => { document.getElementById('cardNumberInput').focus(); }, 60);
+
+    function closeCardTerminal() {
+        overlay.style.display = 'none';
+        if (modalInstance && modalInstance._focustrap) modalInstance._focustrap.activate();
+    }
+
+    document.getElementById('cardTerminalClose').onclick = closeCardTerminal;
+    document.getElementById('cardTerminalCancel').onclick = closeCardTerminal;
+
+    document.getElementById('cardTerminalConfirm').onclick = function () {
+        const num = document.getElementById('cardNumberInput').value;
+        const name = document.getElementById('cardNameInput').value.trim();
+        const exp = document.getElementById('cardExpiryInput').value;
+        closeCardTerminal();
+        onConfirm({ last4: num.replace(/\s/g, '').slice(-4), name, expiry: exp });
+    };
 }
 
 function showOrderModal(productId, productName, price, wholesalePrice) {
@@ -1101,6 +1404,12 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
                 </button>
                 <div id="gcashProofStatus" class="mt-2 small" style="display:none;"></div>
             </div>
+            <div id="cardPaySection" class="mb-3" style="display:none;">
+                <button type="button" class="btn btn-dark w-100" id="cardPayBtn">
+                    <i class="fa-solid fa-credit-card me-2"></i>Enter Card Details
+                </button>
+                <div id="cardProofStatus" class="mt-2 small" style="display:none;"></div>
+            </div>
         </form>
     `;
 
@@ -1124,6 +1433,9 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
     let deliveryMarker = null;
     let mapInitialized = false;
     let gcashScreenshotFile = null;
+    let cardConfirmedData = null;
+
+    ensureCardTerminalOverlay();
 
     // ── GCash QR overlay ─────────────────────────────────────
     if (!document.getElementById('gcashQROverlay')) {
@@ -1209,16 +1521,45 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
 
     document.getElementById('paymentMethod').addEventListener('change', function () {
         const gcashSection = document.getElementById('gcashPaySection');
+        const cardSection = document.getElementById('cardPaySection');
         if (this.value === 'GCASH') {
             gcashSection.style.display = 'block';
+            cardSection.style.display = 'none';
+            cardConfirmedData = null;
+            document.getElementById('cardProofStatus').style.display = 'none';
+        } else if (this.value === 'Card') {
+            gcashSection.style.display = 'none';
+            gcashScreenshotFile = null;
+            document.getElementById('gcashProofStatus').style.display = 'none';
+            cardSection.style.display = 'block';
         } else {
             gcashSection.style.display = 'none';
             gcashScreenshotFile = null;
             document.getElementById('gcashProofStatus').style.display = 'none';
+            cardSection.style.display = 'none';
+            cardConfirmedData = null;
+            document.getElementById('cardProofStatus').style.display = 'none';
         }
     });
 
     document.getElementById('gcashPayBtn').addEventListener('click', openGcashOverlay);
+
+    document.getElementById('cardPayBtn').addEventListener('click', () => {
+        openCardTerminal((data) => {
+            cardConfirmedData = data;
+            const statusEl = document.getElementById('cardProofStatus');
+            statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-credit-card text-success"></i>
+                <span class="flex-fill">Card ending in <strong>••••&nbsp;${data.last4}</strong> &mdash; ${data.name}</span>
+                <button type="button" id="cardProofRemoveBtn" class="btn btn-sm btn-outline-danger py-0">Change</button>
+            </div>`;
+            statusEl.style.display = 'block';
+            document.getElementById('cardProofRemoveBtn').onclick = () => {
+                cardConfirmedData = null;
+                statusEl.style.display = 'none';
+            };
+        });
+    });
 
     // ── helpers ──────────────────────────────────────────────
 
@@ -1471,6 +1812,10 @@ function showOrderModal(productId, productName, price, wholesalePrice) {
         if (paymentMethod === 'GCASH' && !gcashScreenshotFile) {
             return showModal('GCash Screenshot Required', 'Please click <strong>Pay with GCash</strong>, scan the QR code, then upload your transaction screenshot before placing the order.', 'bg-info text-white',
                 [{text: 'Ok', class: 'btn btn-info', dataDismiss: true}]);
+        }
+        if (paymentMethod === 'Card' && !cardConfirmedData) {
+            return showModal('Card Details Required', 'Please click <strong>Enter Card Details</strong> and complete the card terminal before placing the order.', 'bg-dark text-white',
+                [{text: 'Ok', class: 'btn btn-dark', dataDismiss: true}]);
         }
 
         bootstrapModal.hide();
@@ -2050,6 +2395,13 @@ function checkoutUserCart() {
             <div id="cartGcashProofStatus" class="mt-2 small" style="display:none;"></div>
         </div>
 
+        <div id="cartCardPaySection" class="mb-3" style="display:none;">
+            <button type="button" class="btn btn-dark w-100" id="cartCardPayBtn">
+                <i class="fa-solid fa-credit-card me-2"></i>Enter Card Details
+            </button>
+            <div id="cartCardProofStatus" class="mt-2 small" style="display:none;"></div>
+        </div>
+
         <div class="mb-3">
             <label class="form-label fw-medium">Order Notes (Optional)</label>
             <textarea class="form-control" id="cartOrderNotes" rows="2"
@@ -2077,6 +2429,9 @@ function checkoutUserCart() {
     let deliveryMarker = null;
     let mapInitialized = false;
     let gcashScreenshotFile = null;
+    let cardConfirmedData = null;
+
+    ensureCardTerminalOverlay();
 
     // GCash overlay (reuse existing or create)
     if (!document.getElementById('gcashQROverlay')) {
@@ -2157,17 +2512,46 @@ function checkoutUserCart() {
     };
 
     document.getElementById('cartPaymentMethod').addEventListener('change', function () {
-        const sec = document.getElementById('cartGcashPaySection');
+        const gcashSec = document.getElementById('cartGcashPaySection');
+        const cardSec = document.getElementById('cartCardPaySection');
         if (this.value === 'GCASH') {
-            sec.style.display = 'block';
-        } else {
-            sec.style.display = 'none';
+            gcashSec.style.display = 'block';
+            cardSec.style.display = 'none';
+            cardConfirmedData = null;
+            document.getElementById('cartCardProofStatus').style.display = 'none';
+        } else if (this.value === 'Card') {
+            gcashSec.style.display = 'none';
             gcashScreenshotFile = null;
             document.getElementById('cartGcashProofStatus').style.display = 'none';
+            cardSec.style.display = 'block';
+        } else {
+            gcashSec.style.display = 'none';
+            gcashScreenshotFile = null;
+            document.getElementById('cartGcashProofStatus').style.display = 'none';
+            cardSec.style.display = 'none';
+            cardConfirmedData = null;
+            document.getElementById('cartCardProofStatus').style.display = 'none';
         }
     });
 
     document.getElementById('cartGcashPayBtn').addEventListener('click', openGcashOverlayCart);
+
+    document.getElementById('cartCardPayBtn').addEventListener('click', () => {
+        openCardTerminal((data) => {
+            cardConfirmedData = data;
+            const statusEl = document.getElementById('cartCardProofStatus');
+            statusEl.innerHTML = `<div class="alert alert-success py-2 mb-0 d-flex align-items-center gap-2">
+                <i class="fa-solid fa-credit-card text-success"></i>
+                <span class="flex-fill">Card ending in <strong>••••&nbsp;${data.last4}</strong> &mdash; ${data.name}</span>
+                <button type="button" id="cartCardProofRemoveBtn" class="btn btn-sm btn-outline-danger py-0">Change</button>
+            </div>`;
+            statusEl.style.display = 'block';
+            document.getElementById('cartCardProofRemoveBtn').onclick = () => {
+                cardConfirmedData = null;
+                statusEl.style.display = 'none';
+            };
+        });
+    });
 
     // Delivery fee helpers
     function setCartGeoStatus(state) {
@@ -2355,6 +2739,12 @@ function checkoutUserCart() {
                 'Please click <strong>Pay with GCash</strong>, scan the QR code, then upload your screenshot before placing the order.',
                 'bg-info text-white',
                 [{ text: 'Ok', class: 'btn btn-info', dataDismiss: true }]);
+        }
+        if (paymentMethod === 'Card' && !cardConfirmedData) {
+            return showModal('Card Details Required',
+                'Please click <strong>Enter Card Details</strong> and complete the card terminal before placing the order.',
+                'bg-dark text-white',
+                [{ text: 'Ok', class: 'btn btn-dark', dataDismiss: true }]);
         }
 
         bootstrapModal.hide();
@@ -3256,9 +3646,10 @@ function renderRegularOrderRow(order, tableBody, isAdmin) {
     console.log('Order:', order.OrderNumber, 'Status:', order.Status, 'isAdmin:', isAdmin);
     
     const statusBadge = `<span class="badge ${
-        order.Status === 'PENDING' ? 'bg-warning' : 
-        order.Status === 'CONFIRMED' ? 'bg-info' : 
-        order.Status === 'SHIPPED' ? 'bg-primary' : 
+        order.Status === 'PENDING'   ? 'bg-warning' :
+        order.Status === 'CONFIRMED' ? 'bg-info'    :
+        order.Status === 'SHIPPED'   ? 'bg-primary' :
+        order.Status === 'CANCELLED' ? 'bg-danger'  :
         'bg-success'
     }">${order.Status}</span>`;
     
@@ -3305,17 +3696,23 @@ function renderRegularOrderRow(order, tableBody, isAdmin) {
                 <button class="btn btn-sm btn-success" onclick="showDeliveryConfirmModal(${order.OrderID}, '${order.OrderNumber}')">
                     <i class="fa-solid fa-box-open me-1"></i>Confirm</button></div>`;
         } else {
-            actionBtn = `<div class="d-flex justify-content-center w-100">
+            // DELIVERED — show Receipt + Rate (or Reviewed badge)
+            const alreadyReviewed = isReviewed(order.OrderID, order.ProductID);
+            const rateBtn = alreadyReviewed
+                ? `<button class="btn btn-sm btn-outline-success" disabled><i class="fa-solid fa-check me-1"></i>Reviewed</button>`
+                : `<button class="btn btn-sm btn-warning text-dark" onclick="showFeedbackModal(${order.OrderID}, ${order.ProductID}, '${order.ProductName.replace(/'/g, "\\'")}', '${order.OrderNumber}')"><i class="fa-solid fa-star me-1"></i>Leave a Review</button>`;
+            actionBtn = `<div class="d-flex gap-2 justify-content-center flex-wrap w-100">
                 <button class="btn btn-sm btn-info" onclick="showOrderDetailsModal('${btoa(JSON.stringify(order))}')">
                     <i class="fa-solid fa-eye me-1"></i>Receipt</button>
+                ${rateBtn}
             </div>`;
         }
     }
-    
+
     // Build the row content
     let rowContent = `
         <td><strong>${order.OrderNumber}</strong></td>`;
-    
+
     // Add customer name + phone cell if showing all orders
     if (isAdmin) {
         const customerName = order.UserFullName || order.Username || 'Unknown';
@@ -3351,7 +3748,7 @@ function renderPOSOrderRow(groupedOrder, tableBody, isAdmin) {
     const formattedDate = orderDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
     
     // For POS orders, always show "POS" status
-    const statusBadge = `<span class="badge bg-success">POS</span>`;
+    const statusBadge = `<span class="badge bg-secondary">POS</span>`;
     
     // For POS orders, show only "View Receipt" button
     const actionBtn = `<div class="d-flex justify-content-center w-100">
@@ -3372,9 +3769,9 @@ function renderPOSOrderRow(groupedOrder, tableBody, isAdmin) {
     const productList = groupedOrder.items.map(item => item.ProductName).join(', ');
     const totalQuantity = groupedOrder.items.reduce((sum, item) => sum + item.Quantity, 0);
     const totalPrice = groupedOrder.items.reduce((sum, item) => sum + parseFloat(item.TotalPrice), 0);
-    
+
     rowContent += `
-        <td><small>${productList}</small></td>
+        <td style="max-width:200px;"><small class="d-block text-truncate" title="${productList}">${productList}</small></td>
         <td>${totalQuantity}</td>
         <td>
             <div class="small">
@@ -3435,6 +3832,13 @@ function renderGroupedCartOrderRow(groupedOrder, tableBody, isAdmin) {
                 <i class="fa-solid fa-box-open me-1"></i>Deliver</button>` : ''}
         </div>`;
     } else {
+        const allDelivered = allStatuses.every(s => s === 'DELIVERED');
+        const allReviewed  = allDelivered && items.every(i => isReviewed(i.OrderID, i.ProductID));
+        const reviewBtn = allDelivered
+            ? (allReviewed
+                ? `<button class="btn btn-sm btn-outline-success" disabled><i class="fa-solid fa-check me-1"></i>Reviewed</button>`
+                : `<button class="btn btn-sm btn-warning text-dark" onclick="showProductPickerModal('${encoded}')"><i class="fa-solid fa-star me-1"></i>Leave a Review</button>`)
+            : '';
         actionBtn = `<div class="d-flex gap-1 justify-content-center flex-wrap">
             <button class="btn btn-sm btn-info" onclick="showCartOrderReceiptModal('${encoded}')">
                 <i class="fa-solid fa-eye me-1"></i>Receipt</button>
@@ -3442,6 +3846,7 @@ function renderGroupedCartOrderRow(groupedOrder, tableBody, isAdmin) {
                 <i class="fa-solid fa-times me-1"></i>Cancel</button>` : ''}
             ${allShipped ? `<button class="btn btn-sm btn-success" onclick="confirmGroupedDelivery([${orderIds.join(',')}], '${groupedOrder.OrderNumber}')">
                 <i class="fa-solid fa-box-open me-1"></i>Confirm</button>` : ''}
+            ${reviewBtn}
         </div>`;
     }
 
@@ -3453,7 +3858,7 @@ function renderGroupedCartOrderRow(groupedOrder, tableBody, isAdmin) {
         rowContent += `<td><div class="fw-medium">${name}</div>${phone}</td>`;
     }
     rowContent += `
-        <td><small>${productList}</small></td>
+        <td style="max-width:200px;"><small class="d-block text-truncate" title="${productList}">${productList}</small></td>
         <td>${totalQty}</td>
         <td><div class="text-muted small">Total:</div><strong>₱${grandTotal.toFixed(2)}</strong></td>
         <td>${formattedDate}</td>
@@ -3512,7 +3917,7 @@ function showCartOrderReceiptModal(encodedGroupedOrder) {
         const wholesaleBadge = (unitPrice * qty < parseFloat(item.TotalPrice) - (parseFloat(item.DeliveryFee) || 0) + 0.01)
             ? '' : '';
         const itemStatusBadge = allStatuses.length > 1
-            ? `<span class="badge ${item.Status === 'PENDING' ? 'bg-warning' : item.Status === 'SHIPPED' ? 'bg-primary' : 'bg-success'} ms-1" style="font-size:0.65rem;">${item.Status}</span>`
+            ? `<span class="badge ${item.Status === 'PENDING' ? 'bg-warning' : item.Status === 'CONFIRMED' ? 'bg-info' : item.Status === 'SHIPPED' ? 'bg-primary' : item.Status === 'CANCELLED' ? 'bg-danger' : 'bg-success'} ms-1" style="font-size:0.65rem;">${item.Status}</span>`
             : '';
         return `<tr>
             <td>${item.ProductName}${itemStatusBadge}</td>
@@ -3971,10 +4376,11 @@ function showOrderDetailsModal(encodedOrder) {
     
     // Get status badge color
     const statusBadgeColor = {
-        'PENDING': 'bg-warning',
+        'PENDING':   'bg-warning',
         'CONFIRMED': 'bg-info',
-        'SHIPPED': 'bg-primary',
-        'DELIVERED': 'bg-success'
+        'SHIPPED':   'bg-primary',
+        'DELIVERED': 'bg-success',
+        'CANCELLED': 'bg-danger'
     }[order.Status] || 'bg-secondary';
     
     // Create detailed order information
@@ -4563,9 +4969,10 @@ function printOrderReceipt(encodedOrder) {
                     <div class="receipt-row">
                         <span class="label">Status:</span>
                         <span class="value"><span class="badge status-badge badge-${
-                            order.Status === 'PENDING' ? 'warning' :
-                            order.Status === 'CONFIRMED' ? 'info' :
-                            order.Status === 'SHIPPED' ? 'primary' :
+                            order.Status === 'PENDING'   ? 'warning' :
+                            order.Status === 'CONFIRMED' ? 'info'    :
+                            order.Status === 'SHIPPED'   ? 'primary' :
+                            order.Status === 'CANCELLED' ? 'danger'  :
                             'success'
                         }">${order.Status}</span></span>
                     </div>
@@ -5093,15 +5500,30 @@ function showChangePasswordModal() {
         'Change Password',
         `<div class="mb-3">
             <label class="form-label fw-medium">Current Password</label>
-            <input type="password" class="form-control" id="currentPassword" placeholder="Enter current password">
+            <div class="input-group">
+                <input type="password" class="form-control border-end-0" id="currentPassword" placeholder="Enter current password">
+                <span class="input-group-text bg-white border-start-0 text-sky" id="toggleCurrentPw" role="button" style="cursor:pointer" tabindex="-1">
+                    <i class="fa-solid fa-eye fa-sm" id="toggleCurrentPwIcon"></i>
+                </span>
+            </div>
         </div>
         <div class="mb-3">
             <label class="form-label fw-medium">New Password</label>
-            <input type="password" class="form-control" id="newPassword" placeholder="At least 8 characters">
+            <div class="input-group">
+                <input type="password" class="form-control border-end-0" id="newPassword" placeholder="At least 8 characters">
+                <span class="input-group-text bg-white border-start-0 text-sky" id="toggleNewPw" role="button" style="cursor:pointer" tabindex="-1">
+                    <i class="fa-solid fa-eye fa-sm" id="toggleNewPwIcon"></i>
+                </span>
+            </div>
         </div>
         <div class="mb-0">
             <label class="form-label fw-medium">Confirm New Password</label>
-            <input type="password" class="form-control" id="confirmPassword" placeholder="Repeat new password">
+            <div class="input-group">
+                <input type="password" class="form-control border-end-0" id="confirmPassword" placeholder="Repeat new password">
+                <span class="input-group-text bg-white border-start-0 text-sky" id="toggleConfirmPw" role="button" style="cursor:pointer" tabindex="-1">
+                    <i class="fa-solid fa-eye fa-sm" id="toggleConfirmPwIcon"></i>
+                </span>
+            </div>
         </div>`,
         'bg-danger',
         [
@@ -5109,6 +5531,25 @@ function showChangePasswordModal() {
             { text: 'Change Password', class: 'btn btn-danger', onclick: performChangePassword }
         ]
     );
+    requestAnimationFrame(() => {
+        [['toggleCurrentPw','currentPassword','toggleCurrentPwIcon'],
+         ['toggleNewPw','newPassword','toggleNewPwIcon'],
+         ['toggleConfirmPw','confirmPassword','toggleConfirmPwIcon']].forEach(([btn, inp, ico]) => {
+            const el = document.getElementById(btn);
+            if (!el) return;
+            el.addEventListener('click', function() {
+                const input = document.getElementById(inp);
+                const icon  = document.getElementById(ico);
+                if (input.type === 'password') {
+                    input.type = 'text';
+                    icon.classList.replace('fa-eye', 'fa-eye-slash');
+                } else {
+                    input.type = 'password';
+                    icon.classList.replace('fa-eye-slash', 'fa-eye');
+                }
+            });
+        });
+    });
 }
 
 function performChangePassword() {
@@ -5123,15 +5564,29 @@ function performChangePassword() {
         return;
     }
 
-    if (newPw !== confirm) {
-        showModal('Error', '<p class="mb-0">New passwords do not match.</p>', 'bg-danger', [
+    if (newPw.length < 8) {
+        showModal('Error', '<p class="mb-0">New password must be at least 8 characters.</p>', 'bg-danger', [
             { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
         ]);
         return;
     }
 
-    if (newPw.length < 8) {
-        showModal('Error', '<p class="mb-0">New password must be at least 8 characters.</p>', 'bg-danger', [
+    if (!/[A-Z]/.test(newPw)) {
+        showModal('Error', '<p class="mb-0">New password must contain at least one uppercase letter.</p>', 'bg-danger', [
+            { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+        ]);
+        return;
+    }
+
+    if (!/[^A-Za-z0-9]/.test(newPw)) {
+        showModal('Error', '<p class="mb-0">New password must contain at least one special character.</p>', 'bg-danger', [
+            { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
+        ]);
+        return;
+    }
+
+    if (newPw !== confirm) {
+        showModal('Error', '<p class="mb-0">New passwords do not match.</p>', 'bg-danger', [
             { text: 'Ok', class: 'btn btn-danger', dataDismiss: true }
         ]);
         return;
@@ -5278,6 +5733,8 @@ function renderReport(period) {
     document.getElementById('reportAvgOrder').textContent = `₱${avgOrder.toFixed(2)}`;
     document.getElementById('reportOrderCount').textContent = `${groupedFiltered.length} order${groupedFiltered.length !== 1 ? 's' : ''}`;
 
+    renderReportCharts(filtered, period);
+
     const tableBody = document.getElementById('reportsTableBody');
     tableBody.innerHTML = '';
 
@@ -5306,7 +5763,7 @@ function renderReport(period) {
                 <td><strong>₱${totalPriceGroup.toFixed(2)}</strong></td>
                 <td>${g.items[0].PaymentMethod || '—'}</td>
                 <td>${date}</td>
-                <td><span class="badge bg-success">POS</span></td>
+                <td><span class="badge bg-secondary">POS</span></td>
             `;
         } else {
             const o = g.items[0];
@@ -5329,15 +5786,212 @@ function renderReport(period) {
     });
 }
 
+// ─── REPORT CHARTS ────────────────────────────────────────────────────────────
+window._reportCharts = {};
+
+function renderReportCharts(orders, period) {
+    if (typeof Chart === 'undefined') return;
+
+    const isDark = document.body.classList.contains('dark-mode');
+    const gridColor  = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+    const textColor  = isDark ? '#cbd5e1' : '#555';
+    const cardBg     = isDark ? '#1e293b' : '#fff';
+
+    // Destroy stale instances
+    Object.values(window._reportCharts).forEach(c => { try { c.destroy(); } catch(_) {} });
+    window._reportCharts = {};
+
+    const completed = orders.filter(o =>
+        o.Username === 'WALKIN_CUSTOMER' || (o.Status !== 'CANCELLED' && o.Status !== 'PENDING')
+    );
+
+    // ── 1. Revenue Trend ─────────────────────────────────────────────────────
+    const now = new Date();
+    let trendLabels = [];
+    let trendData   = [];
+    let trendHint   = '';
+
+    if (period === 'today') {
+        // Group by hour
+        trendHint = 'Hourly';
+        const byHour = {};
+        completed.forEach(o => {
+            const h = new Date(o.OrderDate).getHours();
+            byHour[h] = (byHour[h] || 0) + parseFloat(o.TotalPrice);
+        });
+        for (let h = 0; h < 24; h++) {
+            trendLabels.push(h % 3 === 0 ? `${h}:00` : '');
+            trendData.push(parseFloat((byHour[h] || 0).toFixed(2)));
+        }
+    } else if (period === 'weekly') {
+        trendHint = 'Daily (this week)';
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        const byDay = {};
+        completed.forEach(o => {
+            const d = new Date(o.OrderDate).getDay();
+            byDay[d] = (byDay[d] || 0) + parseFloat(o.TotalPrice);
+        });
+        for (let d = 0; d < 7; d++) {
+            trendLabels.push(dayNames[d]);
+            trendData.push(parseFloat((byDay[d] || 0).toFixed(2)));
+        }
+    } else {
+        // Monthly or custom — group by calendar date
+        trendHint = period === 'monthly' ? 'Daily (this month)' : 'Daily';
+        const byDate = {};
+        completed.forEach(o => {
+            const key = new Date(o.OrderDate).toLocaleDateString('en-CA'); // YYYY-MM-DD
+            byDate[key] = (byDate[key] || 0) + parseFloat(o.TotalPrice);
+        });
+        const sortedDates = Object.keys(byDate).sort();
+        sortedDates.forEach(d => {
+            trendLabels.push(new Date(d).toLocaleDateString('en-US', { month:'short', day:'numeric' }));
+            trendData.push(parseFloat(byDate[d].toFixed(2)));
+        });
+        if (sortedDates.length === 0) { trendLabels = []; trendData = []; }
+    }
+
+    const trendLabelEl = document.getElementById('revenueTrendLabel');
+    if (trendLabelEl) trendLabelEl.textContent = trendHint;
+
+    const ctxTrend = document.getElementById('revenueTrendChart');
+    if (ctxTrend) {
+        window._reportCharts.trend = new Chart(ctxTrend, {
+            type: 'bar',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'Revenue (₱)',
+                    data: trendData,
+                    backgroundColor: 'rgba(14,165,233,0.7)',
+                    borderColor: 'rgba(14,165,233,1)',
+                    borderWidth: 1,
+                    borderRadius: 3,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `₱${ctx.parsed.y.toFixed(2)}` } }
+                },
+                scales: {
+                    x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 10 } } },
+                    y: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 10 }, callback: v => `₱${v}` } }
+                }
+            }
+        });
+    }
+
+    // ── 2. Order Status Donut ─────────────────────────────────────────────────
+    const statusMap = { PENDING:'#f59e0b', CONFIRMED:'#0ea5e9', SHIPPED:'#6366f1', DELIVERED:'#22c55e', CANCELLED:'#ef4444' };
+    const statusCounts = {};
+    orders.forEach(o => {
+        const s = o.Status || (o.Username === 'WALKIN_CUSTOMER' ? 'POS' : 'UNKNOWN');
+        statusCounts[s] = (statusCounts[s] || 0) + 1;
+    });
+    const statusLabels = Object.keys(statusCounts);
+    const statusValues = statusLabels.map(k => statusCounts[k]);
+    const statusColors = statusLabels.map(k => statusMap[k] || '#94a3b8');
+
+    const ctxStatus = document.getElementById('orderStatusChart');
+    if (ctxStatus) {
+        window._reportCharts.status = new Chart(ctxStatus, {
+            type: 'doughnut',
+            data: { labels: statusLabels, datasets: [{ data: statusValues, backgroundColor: statusColors, borderWidth: 1 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: textColor, font: { size: 9 }, boxWidth: 10, padding: 6 } }
+                }
+            }
+        });
+    }
+
+    // ── 3. Payment Methods Donut ──────────────────────────────────────────────
+    const pmMap  = {};
+    const pmPalette = ['#0ea5e9','#22c55e','#f59e0b','#a855f7','#ef4444','#94a3b8'];
+    orders.forEach(o => {
+        const m = o.PaymentMethod || 'Unknown';
+        pmMap[m] = (pmMap[m] || 0) + 1;
+    });
+    const pmLabels = Object.keys(pmMap);
+    const pmValues = pmLabels.map(k => pmMap[k]);
+    const pmColors = pmLabels.map((_, i) => pmPalette[i % pmPalette.length]);
+
+    const ctxPay = document.getElementById('paymentMethodChart');
+    if (ctxPay) {
+        window._reportCharts.payment = new Chart(ctxPay, {
+            type: 'doughnut',
+            data: { labels: pmLabels, datasets: [{ data: pmValues, backgroundColor: pmColors, borderWidth: 1 }] },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: textColor, font: { size: 9 }, boxWidth: 10, padding: 6 } }
+                }
+            }
+        });
+    }
+
+    // ── 4. Top 5 Products by Revenue ─────────────────────────────────────────
+    const productRev = {};
+    completed.forEach(o => {
+        const n = o.ProductName || 'Unknown';
+        productRev[n] = (productRev[n] || 0) + parseFloat(o.TotalPrice);
+    });
+    const sortedProds = Object.entries(productRev).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const prodLabels  = sortedProds.map(([name]) => name.length > 18 ? name.slice(0, 16) + '…' : name);
+    const prodValues  = sortedProds.map(([, rev]) => parseFloat(rev.toFixed(2)));
+    const prodColors  = ['rgba(14,165,233,0.8)','rgba(34,197,94,0.8)','rgba(245,158,11,0.8)','rgba(168,85,247,0.8)','rgba(239,68,68,0.8)'];
+
+    const ctxProd = document.getElementById('topProductsChart');
+    if (ctxProd) {
+        window._reportCharts.products = new Chart(ctxProd, {
+            type: 'bar',
+            data: {
+                labels: prodLabels,
+                datasets: [{
+                    label: 'Revenue (₱)',
+                    data: prodValues,
+                    backgroundColor: prodColors.slice(0, prodValues.length),
+                    borderWidth: 0,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `₱${ctx.parsed.x.toFixed(2)}` } }
+                },
+                scales: {
+                    x: { grid: { color: gridColor }, ticks: { color: textColor, font: { size: 10 }, callback: v => `₱${v}` } },
+                    y: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 } } }
+                }
+            }
+        });
+    }
+}
+
 function applyCustomDateRange() {
     const fromVal = document.getElementById('reportDateFrom').value;
     const toVal = document.getElementById('reportDateTo').value;
     if (!fromVal || !toVal) {
-        alert('Please select both a start date and an end date.');
+        showModal('Missing Dates', '<p class="mb-0"><i class="fa-solid fa-calendar-xmark me-2 text-warning"></i>Please select both a start date and an end date.</p>', 'bg-warning text-dark', [{ text: 'Got it', class: 'btn btn-warning', dataDismiss: true }]);
         return;
     }
     if (new Date(fromVal) > new Date(toVal)) {
-        alert('Start date cannot be after end date.');
+        showModal('Invalid Range', '<p class="mb-0"><i class="fa-solid fa-triangle-exclamation me-2 text-danger"></i>Start date cannot be after end date.</p>', 'bg-danger', [{ text: 'Got it', class: 'btn btn-danger', dataDismiss: true }]);
         return;
     }
     renderReport('custom');
@@ -6088,6 +6742,368 @@ function loadActivityLogs(page) {
             console.error('Error loading logs:', err);
             if (tableBody) tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-4">Error loading logs.</td></tr>`;
         });
+}
+
+// ============================================
+// REVIEWS — ADMIN/MANAGER
+// ============================================
+function loadReviews() {
+    const container = document.getElementById('reviewsContainer');
+    const totalBadge = document.getElementById('reviewsTotalCount');
+    if (container) container.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-spinner fa-spin me-2"></i>Loading reviews...</div>';
+
+    fetch('customer_api.php?action=get_all_reviews')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                if (container) container.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                return;
+            }
+            displayReviews(data.reviews, container, totalBadge);
+        })
+        .catch(err => {
+            if (container) container.innerHTML = `<div class="alert alert-danger">Failed to load reviews.</div>`;
+        });
+}
+
+function displayReviews(reviews, container, totalBadge) {
+    if (totalBadge) totalBadge.textContent = `${reviews.length} review${reviews.length !== 1 ? 's' : ''}`;
+
+    if (reviews.length === 0) {
+        container.innerHTML = `<div class="text-center text-muted py-5"><i class="fa-solid fa-star me-2"></i>No reviews yet.</div>`;
+        return;
+    }
+
+    // Group by product
+    const byProduct = {};
+    reviews.forEach(r => {
+        if (!byProduct[r.ProductID]) {
+            byProduct[r.ProductID] = {
+                productId: r.ProductID,
+                productName: r.ProductName,
+                category: r.Category,
+                imagePath: r.ImagePath,
+                reviews: []
+            };
+        }
+        byProduct[r.ProductID].reviews.push(r);
+    });
+
+    const starHtml = (rating) => {
+        let html = '';
+        for (let i = 1; i <= 5; i++) {
+            html += i <= rating
+                ? '<i class="fa-solid fa-star text-warning"></i>'
+                : '<i class="fa-regular fa-star text-warning"></i>';
+        }
+        return html;
+    };
+
+    let html = '';
+    Object.values(byProduct).forEach(group => {
+        const avgRating = group.reviews.reduce((s, r) => s + parseInt(r.Rating), 0) / group.reviews.length;
+        const imgSrc = group.imagePath ? group.imagePath : null;
+        const imgHtml = imgSrc
+            ? `<img src="${imgSrc}" alt="${group.productName}" class="rounded me-3" style="width:56px;height:56px;object-fit:cover;">`
+            : `<div class="rounded me-3 bg-sky-subtle d-flex align-items-center justify-content-center" style="width:56px;height:56px;flex-shrink:0;"><i class="fa-solid fa-box text-sky"></i></div>`;
+
+        const reviewRows = group.reviews.map(r => {
+            const date = new Date(r.CreatedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            const comment = r.Comment ? `<p class="mb-0 text-muted small mt-1">"${r.Comment}"</p>` : '';
+            return `<div class="border-bottom pb-2 mb-2">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <strong class="small">${r.FullName || r.Username}</strong>
+                        <span class="text-muted small ms-2">${r.OrderNumber}</span>
+                    </div>
+                    <span class="text-muted small">${date}</span>
+                </div>
+                <div>${starHtml(r.Rating)}</div>
+                ${comment}
+            </div>`;
+        }).join('');
+
+        html += `
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center">
+                    ${imgHtml}
+                    <div>
+                        <h6 class="mb-0 fw-bold">${group.productName}</h6>
+                        <small class="text-muted">${group.category || ''}</small>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <div>${starHtml(Math.round(avgRating))} <span class="fw-semibold ms-1">${avgRating.toFixed(1)}</span></div>
+                    <small class="text-muted">${group.reviews.length} review${group.reviews.length !== 1 ? 's' : ''}</small>
+                </div>
+            </div>
+            <div class="card-body" style="max-height:340px;overflow-y:auto;">
+                ${reviewRows}
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// ============================================
+// REVIEWS — CUSTOMER FEEDBACK
+// ============================================
+
+// Keyed as "orderId_productId" — populated on loadOrderHistory
+window.myReviewedSet = new Set();
+
+function loadMyReviews() {
+    fetch('customer_api.php?action=get_my_reviews')
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.myReviewedSet = new Set(data.reviewed.map(r => `${r.orderId}_${r.productId}`));
+            }
+        })
+        .catch(() => {});
+}
+
+function isReviewed(orderId, productId) {
+    return window.myReviewedSet.has(`${orderId}_${productId}`);
+}
+
+function showProductPickerModal(encodedGroupedOrder) {
+    const groupedOrder = JSON.parse(atob(encodedGroupedOrder));
+    const items = groupedOrder.items;
+
+    const rows = items.map(item => {
+        const already = isReviewed(item.OrderID, item.ProductID);
+        const name = item.ProductName.replace(/'/g, "\\'");
+        return `<div class="d-flex align-items-center justify-content-between border-bottom py-2">
+            <span class="fw-medium">${item.ProductName}</span>
+            ${already
+                ? `<button class="btn btn-sm btn-outline-success" disabled><i class="fa-solid fa-check me-1"></i>Reviewed</button>`
+                : `<button class="btn btn-sm btn-warning text-dark" onclick="pickProductForReview(${item.OrderID}, ${item.ProductID}, '${name}', '${item.OrderNumber}')"><i class="fa-solid fa-star me-1"></i>Rate</button>`}
+        </div>`;
+    }).join('');
+
+    showModal(
+        'Choose a Product to Review',
+        `<p class="text-muted small mb-3">Order: <strong>${groupedOrder.OrderNumber}</strong></p>${rows}`,
+        'bg-warning text-dark',
+        [{ text: 'Close', class: 'btn btn-secondary', dataDismiss: true }]
+    );
+}
+
+function pickProductForReview(orderId, productId, productName, orderNumber) {
+    // Close the picker modal first, then open the feedback modal
+    const picker = bootstrap.Modal.getInstance(document.getElementById('adminModal'));
+    if (picker) picker.hide();
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = 'auto';
+    setTimeout(() => showFeedbackModal(orderId, productId, productName, orderNumber), 300);
+}
+
+function showFeedbackModal(orderId, productId, productName, orderNumber) {
+    document.getElementById('feedbackOrderId').value    = orderId;
+    document.getElementById('feedbackProductId').value  = productId;
+    document.getElementById('feedbackProductName').textContent = productName;
+    document.getElementById('feedbackOrderNumber').textContent = orderNumber;
+    document.getElementById('feedbackComment').value    = '';
+    document.getElementById('selectedRating').value     = '0';
+    document.getElementById('starRatingLabel').textContent = '';
+
+    // Reset stars to empty
+    document.querySelectorAll('.star-btn').forEach(s => {
+        s.className = 'fa-regular fa-star star-btn';
+    });
+
+    const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+    modal.show();
+}
+
+// Star rating interaction
+document.addEventListener('DOMContentLoaded', function () {
+    const starLabels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+
+    document.addEventListener('click', function (e) {
+        const star = e.target.closest('.star-btn');
+        if (!star) return;
+        const val = parseInt(star.dataset.value);
+        document.getElementById('selectedRating').value = val;
+        document.getElementById('starRatingLabel').textContent = starLabels[val] || '';
+        document.querySelectorAll('.star-btn').forEach(s => {
+            const sv = parseInt(s.dataset.value);
+            s.className = sv <= val ? 'fa-solid fa-star star-btn' : 'fa-regular fa-star star-btn';
+        });
+    });
+
+    document.addEventListener('mouseover', function (e) {
+        const star = e.target.closest('.star-btn');
+        if (!star) return;
+        const val = parseInt(star.dataset.value);
+        document.querySelectorAll('.star-btn').forEach(s => {
+            const sv = parseInt(s.dataset.value);
+            s.className = sv <= val ? 'fa-solid fa-star star-btn' : 'fa-regular fa-star star-btn';
+        });
+    });
+
+    document.addEventListener('mouseout', function (e) {
+        const star = e.target.closest('.star-btn');
+        if (!star) return;
+        const selected = parseInt(document.getElementById('selectedRating')?.value || 0);
+        document.querySelectorAll('.star-btn').forEach(s => {
+            const sv = parseInt(s.dataset.value);
+            s.className = sv <= selected ? 'fa-solid fa-star star-btn' : 'fa-regular fa-star star-btn';
+        });
+    });
+});
+
+function submitFeedback() {
+    const orderId   = document.getElementById('feedbackOrderId').value;
+    const productId = document.getElementById('feedbackProductId').value;
+    const rating    = parseInt(document.getElementById('selectedRating').value);
+    const comment   = document.getElementById('feedbackComment').value.trim();
+
+    if (!rating || rating < 1 || rating > 5) {
+        showModal('No Rating Selected', '<p class="mb-0"><i class="fa-solid fa-star me-2 text-warning"></i>Please select a star rating before submitting.</p>', 'bg-warning text-dark', [{ text: 'Got it', class: 'btn btn-warning', dataDismiss: true }]);
+        return;
+    }
+
+    const btn = document.getElementById('submitFeedbackBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-1"></i>Submitting...'; }
+
+    const fd = new FormData();
+    fd.append('action',    'submit_review');
+    fd.append('orderId',   orderId);
+    fd.append('productId', productId);
+    fd.append('rating',    rating);
+    fd.append('comment',   comment);
+
+    fetch('customer_api.php', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            const fbModal = bootstrap.Modal.getInstance(document.getElementById('feedbackModal'));
+            if (fbModal) fbModal.hide();
+
+            if (data.success) {
+                // Mark as reviewed locally so button updates without reload
+                window.myReviewedSet.add(`${orderId}_${productId}`);
+                showModal(
+                    'Thank You!',
+                    `<p class="mb-0"><i class="fa-solid fa-check-circle text-success me-2"></i>Your review has been submitted successfully!</p>`,
+                    'bg-success',
+                    [{ text: 'Close', class: 'btn btn-success', dataDismiss: true, onclick: () => setTimeout(loadOrderHistory, 300) }]
+                );
+            } else {
+                showModal('Error', `Failed to submit review: ${data.error}`, 'bg-danger',
+                    [{ text: 'Ok', class: 'btn btn-danger', dataDismiss: true }]);
+            }
+        })
+        .catch(() => {
+            showModal('Error', 'Something went wrong. Please try again.', 'bg-danger',
+                [{ text: 'Ok', class: 'btn btn-danger', dataDismiss: true }]);
+        })
+        .finally(() => {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane me-1"></i>Submit Review'; }
+        });
+}
+
+// ============================================
+// BEST SELLING — STAR-RATING BASED TOP 5
+// ============================================
+
+// Map<productId, rank> — populated on init; used by browse product cards for badges
+window.bestSellerRanks = null;
+
+function loadBestSellerIds() {
+    fetch('customer_api.php?action=get_best_sellers')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) return;
+            window.bestSellerRanks = new Map(data.sellers.map((s, i) => [parseInt(s.ProductID), i + 1]));
+            // Re-render browse products so badges appear without a manual refresh
+            if (typeof browseProductsFiltered !== 'undefined' && browseProductsFiltered.length) {
+                displayBrowseProducts(browseProductsFiltered);
+            }
+        })
+        .catch(() => {});
+}
+
+function loadBestSelling() {
+    const container = document.getElementById('bestSellingContainer');
+    if (container) container.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-spinner fa-spin me-2"></i>Loading...</div>';
+
+    fetch('customer_api.php?action=get_best_sellers')
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                if (container) container.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                return;
+            }
+            displayBestSelling(data.sellers, container);
+        })
+        .catch(() => {
+            if (container) container.innerHTML = '<div class="alert alert-danger">Failed to load best sellers.</div>';
+        });
+}
+
+function displayBestSelling(sellers, container) {
+    if (!sellers || sellers.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-5"><i class="fa-solid fa-trophy me-2"></i>No ratings yet. Products will appear here once customers leave reviews.</div>';
+        return;
+    }
+
+    const starHtml = (avg) => {
+        let html = '';
+        for (let i = 1; i <= 5; i++) {
+            if (i <= Math.floor(avg)) {
+                html += '<i class="fa-solid fa-star text-warning"></i>';
+            } else if (i - avg < 1 && i - avg > 0) {
+                html += '<i class="fa-solid fa-star-half-stroke text-warning"></i>';
+            } else {
+                html += '<i class="fa-regular fa-star text-warning"></i>';
+            }
+        }
+        return html;
+    };
+
+    const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32', '#f59e0b', '#f59e0b'];
+    const rankLabels = ['🥇 #1 Best Seller', '🥈 #2 Best Seller', '🥉 #3 Best Seller', '#4 Top Rated', '#5 Top Rated'];
+
+    let html = '<div class="row g-3">';
+    sellers.forEach((s, i) => {
+        const avg = parseFloat(s.AvgRating).toFixed(1);
+        const rank = i + 1;
+        const imgHtml = s.ImagePath
+            ? `<img src="${s.ImagePath}" alt="${s.ProductName}" class="rounded-start" style="width:90px;height:90px;object-fit:cover;flex-shrink:0;">`
+            : `<div class="rounded-start bg-light d-flex align-items-center justify-content-center" style="width:90px;height:90px;flex-shrink:0;"><i class="fa-solid fa-box fa-2x text-muted"></i></div>`;
+        const commentHtml = s.SampleComment
+            ? `<p class="mb-0 text-muted small fst-italic mt-1" style="overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">"${s.SampleComment}"</p>`
+            : '';
+        html += `
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="border-left: 5px solid ${rankColors[i]} !important;">
+                <div class="card-body p-0 d-flex align-items-stretch">
+                    ${imgHtml}
+                    <div class="p-3 flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-1">
+                            <div>
+                                <span class="badge mb-1" style="background:${rankColors[i]};color:${i < 3 ? '#fff' : '#1a1a1a'};">${rankLabels[i]}</span>
+                                <h6 class="mb-0 fw-bold">${s.ProductName}</h6>
+                                <small class="text-muted">${s.Category || ''}</small>
+                            </div>
+                            <div class="text-end">
+                                <div>${starHtml(avg)} <strong>${avg}</strong></div>
+                                <small class="text-muted">${s.ReviewCount} review${s.ReviewCount != 1 ? 's' : ''}</small>
+                            </div>
+                        </div>
+                        ${commentHtml}
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
 }
 
 function logsChangePage(delta) {

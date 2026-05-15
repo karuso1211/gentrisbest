@@ -31,6 +31,18 @@ if (strlen($newPassword) < 8) {
     exit();
 }
 
+if (!preg_match('/[A-Z]/', $newPassword)) {
+    echo json_encode(['success' => false, 'error' => 'Password must contain at least one uppercase letter']);
+    sqlsrv_close($conn);
+    exit();
+}
+
+if (!preg_match('/[^A-Za-z0-9]/', $newPassword)) {
+    echo json_encode(['success' => false, 'error' => 'Password must contain at least one special character']);
+    sqlsrv_close($conn);
+    exit();
+}
+
 // Validate token
 $stmt = sqlsrv_query($conn, "SELECT Email, ExpiresAt, Used FROM PasswordResets WHERE Token = ?", [$token]);
 $reset = ($stmt) ? sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC) : null;

@@ -48,6 +48,8 @@
         .text-sky {
             color: var(--sky-blue) !important;
         }
+        input[type="password"]::-ms-reveal,
+        input[type="password"]::-ms-clear { display: none; }
 
         .bg-sky {
             background-color: var(--sky-blue) !important;
@@ -302,6 +304,68 @@
         #imagePreviewModal {
             background: rgba(0, 0, 0, 0.85);
         }
+
+        /* ── Report header pill buttons ── */
+        .report-period-btn {
+            background-color: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.28);
+            color: rgba(255,255,255,0.82);
+            font-weight: 500;
+            font-size: 0.78rem;
+            padding: 0.28rem 0.85rem;
+            transition: background 0.18s, color 0.18s, border-color 0.18s, box-shadow 0.18s;
+        }
+        .report-period-btn:hover {
+            background-color: rgba(255,255,255,0.22);
+            border-color: rgba(255,255,255,0.5);
+            color: #fff;
+        }
+        .btn-check:checked + .report-period-btn {
+            background-color: #fff;
+            color: var(--sky-blue);
+            border-color: #fff;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.14);
+        }
+        .report-date-input {
+            border-radius: 20px !important;
+            border: 1px solid rgba(255,255,255,0.35) !important;
+            background: rgba(255,255,255,0.13) !important;
+            color: #fff !important;
+            font-size: 0.78rem;
+            padding: 0.25rem 0.75rem;
+        }
+        .report-date-input::placeholder { color: rgba(255,255,255,0.55); }
+        .report-date-input::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.7); cursor: pointer; }
+        .report-date-input:focus {
+            background: rgba(255,255,255,0.22) !important;
+            border-color: rgba(255,255,255,0.6) !important;
+            box-shadow: none !important;
+            color: #fff !important;
+            outline: none;
+        }
+        .report-action-btn {
+            background-color: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.28);
+            color: rgba(255,255,255,0.9);
+            font-weight: 500;
+            font-size: 0.78rem;
+            padding: 0.28rem 0.9rem;
+            transition: background 0.18s, color 0.18s, border-color 0.18s;
+        }
+        .report-action-btn:hover {
+            background-color: #fff;
+            color: var(--sky-blue);
+            border-color: #fff;
+        }
+        .report-count-badge {
+            background-color: rgba(255,255,255,0.15);
+            color: rgba(255,255,255,0.9);
+            border: 1px solid rgba(255,255,255,0.28);
+            font-size: 0.72rem;
+            font-weight: 500;
+            padding: 0.32rem 0.75rem;
+        }
     </style>
 </head>
 
@@ -312,11 +376,13 @@
             
             <nav class="col-md-3 col-lg-2 d-md-block sidebar h-100 d-flex flex-column dashboard-layout">
                 <div class="d-flex align-items-center px-4 py-3 border-bottom bg-white">
-                    <div class="bg-sky text-white rounded-circle d-flex align-items-center justify-content-center me-3 shadow-sm border border-2 border-white"
-                        style="width: 40px; height: 40px; font-size: 1.2rem; overflow: hidden;">
-                        <img src="Images/logo1.jpg" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;">
-                    </div>
-                    <h5 class="mb-0 fw-bold text-sky fs-5">Dairy Box GenTri</h5>
+                    <a href="index.html" class="d-flex align-items-center text-decoration-none">
+                        <div class="bg-sky text-white rounded-circle d-flex align-items-center justify-content-center me-3 shadow-sm border border-2 border-white"
+                            style="width: 40px; height: 40px; font-size: 1.2rem; overflow: hidden;">
+                            <img src="Images/logo1.jpg" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;">
+                        </div>
+                        <h5 class="mb-0 fw-bold text-sky fs-5">Dairy Box GenTri</h5>
+                    </a>
                 </div>
 
                 <div class="sidebar-sticky d-flex flex-column flex-grow-1 py-3 bg-white">
@@ -366,6 +432,16 @@
                         <li class="nav-item" id="logsNavItem" style="display: none;">
                             <a class="nav-link" href="#" onclick="showSection('logs'); loadActivityLogs()">
                                 <i class="fa-solid fa-clipboard-list"></i> Activity Logs
+                            </a>
+                        </li>
+                        <li class="nav-item" id="reviewsNavItem" style="display: none;">
+                            <a class="nav-link" href="#" onclick="showSection('reviews'); loadReviews()">
+                                <i class="fa-solid fa-star"></i> Reviews
+                            </a>
+                        </li>
+                        <li class="nav-item" id="bestSellingNavItem" style="display: none;">
+                            <a class="nav-link" href="#" onclick="showSection('bestSelling'); loadBestSelling()">
+                                <i class="fa-solid fa-trophy"></i> Best Selling
                             </a>
                         </li>
                         <li class="nav-item" id="dbNavItem" style="display: none;">
@@ -719,32 +795,93 @@
                         </div>
                     </div>
 
+                    <!-- Charts Row -->
+                    <div class="row g-3 mb-4" id="reportsChartsRow">
+                        <!-- Revenue Trend -->
+                        <div class="col-lg-7">
+                            <div class="card border-0 shadow-sm h-100">
+                                <div class="card-header bg-light py-2 px-3 d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold small"><i class="fa-solid fa-chart-bar me-1 text-sky"></i>Revenue Trend</span>
+                                    <span class="text-muted" style="font-size:0.72rem;" id="revenueTrendLabel"></span>
+                                </div>
+                                <div class="card-body p-2" style="height:190px;">
+                                    <canvas id="revenueTrendChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Order Status + Payment Methods -->
+                        <div class="col-lg-5">
+                            <div class="row g-3 h-100">
+                                <div class="col-6">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light py-2 px-3">
+                                            <span class="fw-semibold small"><i class="fa-solid fa-circle-half-stroke me-1 text-sky"></i>Status</span>
+                                        </div>
+                                        <div class="card-body p-1 d-flex align-items-center justify-content-center" style="height:190px;">
+                                            <canvas id="orderStatusChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="card border-0 shadow-sm h-100">
+                                        <div class="card-header bg-light py-2 px-3">
+                                            <span class="fw-semibold small"><i class="fa-solid fa-credit-card me-1 text-sky"></i>Payment</span>
+                                        </div>
+                                        <div class="card-body p-1 d-flex align-items-center justify-content-center" style="height:190px;">
+                                            <canvas id="paymentMethodChart"></canvas>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Top Products -->
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm">
+                                <div class="card-header bg-light py-2 px-3">
+                                    <span class="fw-semibold small"><i class="fa-solid fa-ranking-star me-1 text-sky"></i>Top 5 Products by Revenue</span>
+                                </div>
+                                <div class="card-body p-2" style="height:160px;">
+                                    <canvas id="topProductsChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Sales Report Table -->
                     <div class="card border-0 shadow-sm">
                         <div class="card-header bg-sky text-white d-flex flex-wrap justify-content-between align-items-center gap-2">
                             <h5 class="mb-0" id="reportTitle"><i class="fa-solid fa-file-invoice me-2"></i>Sales Report</h5>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
-                                <div class="btn-group btn-group-sm" role="group" aria-label="Report period filter">
+                                <!-- Period toggle — individual pill buttons -->
+                                <div class="d-flex gap-1" role="group" aria-label="Report period filter">
                                     <input type="radio" class="btn-check" name="reportPeriod" id="reportToday" value="today" checked>
-                                    <label class="btn btn-outline-light" for="reportToday">Today</label>
+                                    <label class="btn btn-sm report-period-btn rounded-pill" for="reportToday">Today</label>
+
                                     <input type="radio" class="btn-check" name="reportPeriod" id="reportWeekly" value="weekly">
-                                    <label class="btn btn-outline-light" for="reportWeekly">Weekly</label>
+                                    <label class="btn btn-sm report-period-btn rounded-pill" for="reportWeekly">Weekly</label>
+
                                     <input type="radio" class="btn-check" name="reportPeriod" id="reportMonthly" value="monthly">
-                                    <label class="btn btn-outline-light" for="reportMonthly">Monthly</label>
+                                    <label class="btn btn-sm report-period-btn rounded-pill" for="reportMonthly">Monthly</label>
+
                                     <input type="radio" class="btn-check" name="reportPeriod" id="reportCustom" value="custom">
-                                    <label class="btn btn-outline-light" for="reportCustom"><i class="fa-solid fa-calendar-days me-1"></i>Custom</label>
+                                    <label class="btn btn-sm report-period-btn rounded-pill" for="reportCustom">
+                                        <i class="fa-solid fa-calendar-days me-1"></i>Custom
+                                    </label>
                                 </div>
-                                <!-- Custom date range picker (shown only when Custom is selected) -->
+
+                                <!-- Custom date range picker -->
                                 <div id="reportCustomDateRange" style="display:none;" class="d-flex align-items-center gap-1 flex-wrap">
-                                    <input type="date" class="form-control form-control-sm" id="reportDateFrom" style="width:145px;" title="From date">
-                                    <span class="text-white fw-bold">–</span>
-                                    <input type="date" class="form-control form-control-sm" id="reportDateTo" style="width:145px;" title="To date">
-                                    <button class="btn btn-sm btn-light text-sky fw-semibold" onclick="applyCustomDateRange()">
+                                    <input type="date" class="form-control form-control-sm report-date-input" id="reportDateFrom" style="width:140px;" title="From date">
+                                    <span class="text-white opacity-50 mx-1 fw-light">—</span>
+                                    <input type="date" class="form-control form-control-sm report-date-input" id="reportDateTo" style="width:140px;" title="To date">
+                                    <button class="btn btn-sm report-action-btn rounded-pill" onclick="applyCustomDateRange()">
                                         <i class="fa-solid fa-magnifying-glass me-1"></i>View
                                     </button>
                                 </div>
-                                <span class="badge bg-light text-sky" id="reportOrderCount">0 orders</span>
-                                <button class="btn btn-sm btn-light text-sky fw-semibold" onclick="printReport()" title="Print current report">
+
+                                <span class="badge report-count-badge rounded-pill" id="reportOrderCount">0 orders</span>
+
+                                <button class="btn btn-sm report-action-btn rounded-pill" onclick="printReport()" title="Print current report">
                                     <i class="fa-solid fa-print me-1"></i>Print
                                 </button>
                             </div>
@@ -897,6 +1034,40 @@
                     </div>
                 </section>
 
+                <!-- Reviews Section (Admin/Manager) -->
+                <section id="reviewsSection" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0"><i class="fa-solid fa-star me-2"></i>Product Reviews</h5>
+                            <span class="badge bg-dark" id="reviewsTotalCount">0 reviews</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="reviewsContainer">
+                                <div class="text-center text-muted py-5">
+                                    <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading reviews...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Best Selling Section (Admin/Manager/Inventory/Front Desk) -->
+                <section id="bestSellingSection" style="display: none;">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff;">
+                            <h5 class="mb-0"><i class="fa-solid fa-trophy me-2"></i>Best Selling Products</h5>
+                            <span class="badge bg-dark" id="bestSellingSubtitle">Based on customer ratings</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="bestSellingContainer">
+                                <div class="text-center text-muted py-5">
+                                    <i class="fa-solid fa-spinner fa-spin me-2"></i>Loading...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- Database Viewer Section (Admin only) -->
                 <section id="dbSection" style="display: none;">
                     <div class="card border-0 shadow-sm">
@@ -974,6 +1145,51 @@
         </div>
     </div>
 
+    <!-- Feedback / Review Modal -->
+    <div class="modal fade" id="feedbackModal" tabindex="-1" aria-labelledby="feedbackModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-warning text-dark">
+                    <h5 class="modal-title" id="feedbackModalLabel"><i class="fa-solid fa-star me-2"></i>Rate Your Purchase</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-1">Product: <strong id="feedbackProductName"></strong></p>
+                    <p class="text-muted mb-3 small">Order: <span id="feedbackOrderNumber"></span></p>
+
+                    <!-- Star Rating -->
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Rating <span class="text-danger">*</span></label>
+                        <div class="d-flex gap-1 align-items-center" id="starRatingContainer" style="font-size: 1.8rem; cursor: pointer;">
+                            <i class="fa-regular fa-star star-btn" data-value="1" style="color: #f59e0b;"></i>
+                            <i class="fa-regular fa-star star-btn" data-value="2" style="color: #f59e0b;"></i>
+                            <i class="fa-regular fa-star star-btn" data-value="3" style="color: #f59e0b;"></i>
+                            <i class="fa-regular fa-star star-btn" data-value="4" style="color: #f59e0b;"></i>
+                            <i class="fa-regular fa-star star-btn" data-value="5" style="color: #f59e0b;"></i>
+                            <span class="ms-2 text-muted small" id="starRatingLabel" style="font-size: 0.9rem;"></span>
+                        </div>
+                        <input type="hidden" id="selectedRating" value="0">
+                        <input type="hidden" id="feedbackOrderId" value="">
+                        <input type="hidden" id="feedbackProductId" value="">
+                    </div>
+
+                    <!-- Comment -->
+                    <div class="mb-1">
+                        <label for="feedbackComment" class="form-label fw-medium">Comment <span class="badge bg-secondary">Optional</span></label>
+                        <textarea class="form-control" id="feedbackComment" rows="3" maxlength="500" placeholder="Share your experience with this product..."></textarea>
+                        <small class="text-muted">Max 500 characters</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning text-dark fw-semibold" id="submitFeedbackBtn" onclick="submitFeedback()">
+                        <i class="fa-solid fa-paper-plane me-1"></i>Submit Review
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Custom Modal for Admin Actions -->
     <div class="modal fade" id="adminModal" tabindex="-1" aria-labelledby="adminModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" id="adminModalDialog">
@@ -995,6 +1211,7 @@
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="app.js"></script>
     <script>
         (function () {
@@ -1025,6 +1242,7 @@
             }
         })();
     </script>
+    <script src="transitions.js"></script>
 </body>
 
 </html>

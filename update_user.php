@@ -128,6 +128,18 @@ if ($action === 'update_account') {
         exit();
     }
 
+    if (!preg_match('/[A-Z]/', $newPassword)) {
+        echo json_encode(['success' => false, 'error' => 'New password must contain at least one uppercase letter']);
+        sqlsrv_close($conn);
+        exit();
+    }
+
+    if (!preg_match('/[^A-Za-z0-9]/', $newPassword)) {
+        echo json_encode(['success' => false, 'error' => 'New password must contain at least one special character']);
+        sqlsrv_close($conn);
+        exit();
+    }
+
     // Fetch stored password hash
     $fetchSql = "SELECT Password FROM Users WHERE Username = ?";
     $fetchStmt = sqlsrv_query($conn, $fetchSql, [$currentUsername]);

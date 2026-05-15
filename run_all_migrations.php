@@ -175,6 +175,87 @@ if (!$connFailed) {
         $steps[] = info("PasswordResets table already exists");
     }
 
+    // ─── LOGIN OTP TABLE ─────────────────────────────────────────────────────
+    $r = sqlsrv_query($conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='LoginOTP'");
+    if (!$r || !sqlsrv_fetch_array($r)) {
+        $sql = "CREATE TABLE LoginOTP (
+            OTPID     INT IDENTITY(1,1) PRIMARY KEY,
+            Username  NVARCHAR(50)  NOT NULL,
+            OTPHash   NVARCHAR(255) NOT NULL,
+            TempToken NVARCHAR(64)  NOT NULL UNIQUE,
+            ExpiresAt DATETIME      NOT NULL,
+            Used      BIT           NOT NULL DEFAULT 0,
+            Attempts  INT           NOT NULL DEFAULT 0,
+            CreatedAt DATETIME      NOT NULL DEFAULT GETDATE()
+        )";
+        $steps[] = sqlsrv_query($conn, $sql)
+            ? ok("Created LoginOTP table")
+            : err("Failed to create LoginOTP table: " . print_r(sqlsrv_errors(), true));
+    } else {
+        $steps[] = info("LoginOTP table already exists");
+    }
+
+    // ─── IsVerified COLUMN ON USERS ──────────────────────────────────────────
+    $r = sqlsrv_query($conn, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='Users' AND COLUMN_NAME='IsVerified'");
+    if (!$r || !sqlsrv_fetch_array($r)) {
+        $steps[] = sqlsrv_query($conn, "ALTER TABLE Users ADD IsVerified BIT NOT NULL DEFAULT 1")
+            ? ok("Added IsVerified column to Users (existing accounts default to verified)")
+            : err("Failed to add IsVerified column: " . print_r(sqlsrv_errors(), true));
+    } else {
+        $steps[] = info("IsVerified column already exists");
+    }
+
+    // ─── EMAIL VERIFICATIONS TABLE ────────────────────────────────────────────
+    $evExists = false;
+    $r = sqlsrv_query($conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='EmailVerifications'");
+    if ($r && sqlsrv_fetch_array($r)) {
+        $evExists = true;
+        // Check schema is intact — drop and recreate if Username column is missing
+        $rc = sqlsrv_query($conn, "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='EmailVerifications' AND COLUMN_NAME='Username'");
+        if (!$rc || !sqlsrv_fetch_array($rc)) {
+            sqlsrv_query($conn, "DROP TABLE EmailVerifications");
+            $evExists = false;
+            $steps[] = ok("Dropped incomplete EmailVerifications table (missing columns) — will recreate");
+        } else {
+            $steps[] = info("EmailVerifications table already exists and schema is intact");
+        }
+    }
+    if (!$evExists) {
+        $sql = "CREATE TABLE EmailVerifications (
+            TokenID   INT IDENTITY(1,1) PRIMARY KEY,
+            Username  NVARCHAR(50)  NOT NULL,
+            Token     NVARCHAR(128) NOT NULL UNIQUE,
+            ExpiresAt DATETIME      NOT NULL,
+            Used      BIT           NOT NULL DEFAULT 0,
+            CreatedAt DATETIME      NOT NULL DEFAULT GETDATE()
+        )";
+        $steps[] = sqlsrv_query($conn, $sql)
+            ? ok("Created EmailVerifications table")
+            : err("Failed to create EmailVerifications table: " . print_r(sqlsrv_errors(), true));
+    }
+
+    // ─── PRODUCT REVIEWS TABLE ───────────────────────────────────────────────
+    $r = sqlsrv_query($conn, "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='ProductReviews'");
+    if (!$r || !sqlsrv_fetch_array($r)) {
+        $sql = "CREATE TABLE ProductReviews (
+            ReviewID  INT IDENTITY(1,1) PRIMARY KEY,
+            OrderID   INT           NOT NULL,
+            ProductID INT           NOT NULL,
+            Username  NVARCHAR(50)  NOT NULL,
+            Rating    TINYINT       NOT NULL CHECK (Rating BETWEEN 1 AND 5),
+            Comment   NVARCHAR(500) NULL,
+            CreatedAt DATETIME      NOT NULL DEFAULT GETDATE(),
+            CONSTRAINT UQ_Review_OrderProduct UNIQUE (OrderID, ProductID),
+            FOREIGN KEY (ProductID) REFERENCES Products(ProductID),
+            FOREIGN KEY (Username)  REFERENCES Users(Username)
+        )";
+        $steps[] = sqlsrv_query($conn, $sql)
+            ? ok("Created ProductReviews table")
+            : err("Failed to create ProductReviews table: " . print_r(sqlsrv_errors(), true));
+    } else {
+        $steps[] = info("ProductReviews table already exists");
+    }
+
     // ─── SYSTEM ACCOUNTS ──────────────────────────────────────────────────────
     $adminUsername = "admin123";
     $r = sqlsrv_query($conn, "SELECT Username FROM Users WHERE Username = ?", [$adminUsername]);

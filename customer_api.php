@@ -276,7 +276,7 @@ if ($action === 'get_available_products') {
     
 } elseif ($action === 'get_order_history') {
     // Fetch user's orders
-    $sql = "SELECT OrderID, OrderNumber, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, ShippedDate, DeliveryDate, Status, PaymentMethod
+    $sql = "SELECT OrderID, OrderNumber, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, ShippedDate, DeliveryDate, Status, PaymentMethod
             FROM Orders
             WHERE Username = ?
             ORDER BY OrderDate DESC";
@@ -313,7 +313,7 @@ if ($action === 'get_available_products') {
     }
     
     // Fetch all orders with user information
-    $sql = "SELECT OrderID, OrderNumber, Username, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, ShippedDate, DeliveryDate, Status, PaymentMethod,
+    $sql = "SELECT OrderID, OrderNumber, Username, ProductID, ProductName, Quantity, UnitPrice, TotalPrice, DeliveryFee, DeliveryAddress, OrderDate, ShippedDate, DeliveryDate, Status, PaymentMethod,
                    (SELECT CONCAT(FirstName, ' ', LastName) FROM Users WHERE Username = Orders.Username) AS UserFullName,
                    (SELECT ContactNumber FROM Users WHERE Username = Orders.Username) AS UserContactNumber
             FROM Orders
@@ -585,6 +585,127 @@ if ($action === 'get_available_products') {
     
     echo json_encode(['success' => true, 'orders' => $orders]);
     
+} elseif ($action === 'submit_review') {
+    // Only regular users can submit reviews
+    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['USER'])) {
+        echo json_encode(['success' => false, 'error' => 'Only customers can submit reviews']);
+        exit();
+    }
+
+    $orderId   = isset($_POST['orderId'])   ? intval($_POST['orderId'])          : null;
+    $productId = isset($_POST['productId']) ? intval($_POST['productId'])        : null;
+    $rating    = isset($_POST['rating'])    ? intval($_POST['rating'])           : null;
+    $comment   = isset($_POST['comment'])   ? trim($_POST['comment'])            : null;
+
+    if (!$orderId || !$productId || !$rating || $rating < 1 || $rating > 5) {
+        echo json_encode(['success' => false, 'error' => 'Invalid review data']);
+        exit();
+    }
+
+    // Verify order is DELIVERED and belongs to this user and contains this product
+    $orderSql = "SELECT OrderID FROM Orders WHERE OrderID = ? AND Username = ? AND ProductID = ? AND Status = 'DELIVERED'";
+    $orderStmt = sqlsrv_query($conn, $orderSql, [$orderId, $username, $productId]);
+    if (!$orderStmt || !sqlsrv_fetch_array($orderStmt)) {
+        echo json_encode(['success' => false, 'error' => 'Order not eligible for review']);
+        exit();
+    }
+
+    // Check not already reviewed
+    $dupSql = "SELECT ReviewID FROM ProductReviews WHERE OrderID = ? AND ProductID = ?";
+    $dupStmt = sqlsrv_query($conn, $dupSql, [$orderId, $productId]);
+    if ($dupStmt && sqlsrv_fetch_array($dupStmt)) {
+        echo json_encode(['success' => false, 'error' => 'You have already reviewed this item']);
+        exit();
+    }
+
+    $insertSql = "INSERT INTO ProductReviews (OrderID, ProductID, Username, Rating, Comment) VALUES (?, ?, ?, ?, ?)";
+    if (sqlsrv_query($conn, $insertSql, [$orderId, $productId, $username, $rating, $comment ?: null])) {
+        echo json_encode(['success' => true, 'message' => 'Review submitted successfully']);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to submit review']);
+    }
+
+} elseif ($action === 'get_my_reviews') {
+    // Returns the set of (OrderID, ProductID) pairs this user has already reviewed
+    $sql = "SELECT OrderID, ProductID FROM ProductReviews WHERE Username = ?";
+    $stmt = sqlsrv_query($conn, $sql, [$username]);
+    $reviewed = [];
+    if ($stmt) {
+        while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            $reviewed[] = ['orderId' => $row['OrderID'], 'productId' => $row['ProductID']];
+        }
+    }
+    echo json_encode(['success' => true, 'reviewed' => $reviewed]);
+
+} elseif ($action === 'get_all_reviews') {
+    // Admin/Manager only — all reviews grouped by product
+    if (!isset($_SESSION['accountType']) || !in_array($_SESSION['accountType'], ['ADMIN', 'MANAGER'])) {
+        echo json_encode(['success' => false, 'error' => 'Unauthorized']);
+        exit();
+    }
+
+    $sql = "SELECT
+                pr.ReviewID,
+                pr.OrderID,
+                pr.ProductID,
+                pr.Username,
+                CONCAT(u.FirstName, ' ', u.LastName) AS FullName,
+                pr.Rating,
+                pr.Comment,
+                pr.CreatedAt,
+                p.ProductName,
+                p.Category,
+                p.ImagePath,
+                o.OrderNumber
+            FROM ProductReviews pr
+            INNER JOIN Products p ON p.ProductID = pr.ProductID
+            INNER JOIN Users    u ON u.Username  = pr.Username
+            INNER JOIN Orders   o ON o.OrderID   = pr.OrderID
+            ORDER BY p.ProductName, pr.CreatedAt DESC";
+
+    $stmt = sqlsrv_query($conn, $sql);
+    $reviews = [];
+    if ($stmt) {
+        while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            if ($row['CreatedAt'] instanceof DateTime) {
+                $row['CreatedAt'] = $row['CreatedAt']->format('Y-m-d H:i:s');
+            }
+            $reviews[] = $row;
+        }
+    }
+    echo json_encode(['success' => true, 'reviews' => $reviews]);
+
+} elseif ($action === 'get_best_sellers') {
+    // Top 5 products by average star rating; tie-broken by earliest first review
+    $sql = "SELECT TOP 5
+                p.ProductID,
+                p.ProductName,
+                p.Category,
+                p.ImagePath,
+                AVG(CAST(pr.Rating AS FLOAT)) AS AvgRating,
+                COUNT(pr.ReviewID) AS ReviewCount,
+                MIN(pr.CreatedAt) AS FirstReviewDate,
+                (SELECT TOP 1 pr2.Comment
+                 FROM ProductReviews pr2
+                 WHERE pr2.ProductID = p.ProductID AND pr2.Comment IS NOT NULL
+                 ORDER BY pr2.CreatedAt DESC) AS SampleComment
+            FROM Products p
+            INNER JOIN ProductReviews pr ON pr.ProductID = p.ProductID
+            GROUP BY p.ProductID, p.ProductName, p.Category, p.ImagePath
+            ORDER BY AVG(CAST(pr.Rating AS FLOAT)) DESC, MIN(pr.CreatedAt) ASC";
+
+    $stmt = sqlsrv_query($conn, $sql);
+    $sellers = [];
+    if ($stmt) {
+        while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            if ($row['FirstReviewDate'] instanceof DateTime) {
+                $row['FirstReviewDate'] = $row['FirstReviewDate']->format('Y-m-d H:i:s');
+            }
+            $sellers[] = $row;
+        }
+    }
+    echo json_encode(['success' => true, 'sellers' => $sellers]);
+
 } else {
     echo json_encode(['success' => false, 'error' => 'Invalid action']);
 }

@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenTri's Best — Dairy Box GenTri</title>
+    <link rel="icon" type="Images/png" href="Images/logo1.jpg">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --sky: #0ea5e9;
+            --sky-dark: #0284c7;
+            --sky-light: #bae6fd;
+            --sky-pale: #f0f9ff;
+            --sky-mid: #e0f2fe;
+            --dark: #0f172a;
+            --muted: #64748b;
+            --border: #e2e8f0;
+            --white: #ffffff;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            color: var(--dark);
+            background: var(--white);
+            overflow-x: hidden;
+        }
+
+        /* ===== NAVBAR ===== */
+        .navbar {
+            background: rgba(255,255,255,0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            padding: 0.7rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            transition: box-shadow 0.3s;
+        }
+
+        .navbar.scrolled { box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.7rem;
+            text-decoration: none;
+        }
+
+        .navbar-brand img {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--sky-mid);
+        }
+
+        .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+        .brand-main { font-size: 1.1rem; font-weight: 700; color: var(--sky); }
+        .brand-sub { font-size: 0.68rem; color: var(--muted); font-weight: 400; }
+
+        .nav-link {
+            color: var(--muted) !important;
+            font-weight: 500;
+            font-size: 0.9rem;
+            padding: 0.45rem 0.9rem !important;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .nav-link:hover, .nav-link.active-link {
+            color: var(--sky) !important;
+            background: var(--sky-pale);
+        }
+
+        .btn-nav-login {
+            border: 1.5px solid var(--sky);
+            color: var(--sky) !important;
+            background: transparent;
+            border-radius: 10px;
+            padding: 0.4rem 1.1rem !important;
+            font-weight: 600;
+            font-size: 0.875rem !important;
+            transition: all 0.2s;
+        }
+
+        .btn-nav-login:hover { background: var(--sky-pale); }
+
+        .btn-nav-signup {
+            background: var(--sky);
+            color: white !important;
+            border: 1.5px solid var(--sky);
+            border-radius: 10px;
+            padding: 0.4rem 1.1rem !important;
+            font-weight: 600;
+            font-size: 0.875rem !important;
+            transition: all 0.2s;
+        }
+
+        .btn-nav-signup:hover { background: var(--sky-dark); border-color: var(--sky-dark); }
+
+        /* ===== HERO ===== */
+        .hero {
+            min-height: 100vh;
+            background: linear-gradient(145deg, #050e1f 0%, #0a1f3d 45%, #0d3260 100%);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url('Images/loginBG.jpg');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.08;
+        }
+
+        .hero-orb-1 {
+            position: absolute;
+            top: -200px;
+            right: -200px;
+            width: 700px;
+            height: 700px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(14,165,233,0.22) 0%, transparent 65%);
+            pointer-events: none;
+        }
+
+        .hero-orb-2 {
+            position: absolute;
+            bottom: -150px;
+            left: -150px;
+            width: 550px;
+            height: 550px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(14,165,233,0.12) 0%, transparent 65%);
+            pointer-events: none;
+        }
+
+        .hero-content { position: relative; z-index: 2; }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(14,165,233,0.12);
+            border: 1px solid rgba(14,165,233,0.25);
+            color: #7dd3fc;
+            border-radius: 100px;
+            padding: 0.38rem 1rem;
+            font-size: 0.825rem;
+            font-weight: 500;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero h1 {
+            font-size: clamp(2.4rem, 5.5vw, 4.2rem);
+            font-weight: 800;
+            color: white;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+        }
+
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, #38bdf8, #0ea5e9, #7dd3fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p.lead-text {
+            font-size: 1.1rem;
+            color: rgba(255,255,255,0.65);
+            max-width: 500px;
+            line-height: 1.75;
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-actions { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+        .btn-hero-primary {
+            background: var(--sky);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 0.85rem 1.9rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+            box-shadow: 0 8px 25px rgba(14,165,233,0.38);
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .btn-hero-primary:hover {
+            background: var(--sky-dark);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(14,165,233,0.48);
+        }
+
+        .btn-hero-secondary {
+            background: rgba(255,255,255,0.08);
+            color: rgba(255,255,255,0.9);
+            border: 1.5px solid rgba(255,255,255,0.18);
+            border-radius: 12px;
+            padding: 0.85rem 1.9rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+            backdrop-filter: blur(8px);
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .btn-hero-secondary:hover {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border-color: rgba(255,255,255,0.35);
+            transform: translateY(-2px);
+        }
+
+        .hero-stats {
+            display: flex;
+            gap: 2.5rem;
+            margin-top: 3.5rem;
+            flex-wrap: wrap;
+        }
+
+        .hero-stat { display: flex; flex-direction: column; }
+        .stat-num { font-size: 1.65rem; font-weight: 800; color: white; }
+        .stat-lbl { font-size: 0.75rem; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.06em; }
+
+        /* Logo orb */
+        .hero-visual { display: flex; justify-content: center; align-items: center; position: relative; }
+
+        .logo-ring {
+            width: 290px;
+            height: 290px;
+            border-radius: 50%;
+            background: rgba(14,165,233,0.07);
+            border: 1.5px solid rgba(14,165,233,0.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .logo-ring::before {
+            content: '';
+            position: absolute;
+            inset: -22px;
+            border-radius: 50%;
+            border: 1px dashed rgba(14,165,233,0.25);
+            animation: spin-ring 24s linear infinite;
+        }
+
+        .logo-ring::after {
+            content: '';
+            position: absolute;
+            inset: -44px;
+            border-radius: 50%;
+            border: 1px dashed rgba(14,165,233,0.12);
+            animation: spin-ring 40s linear infinite reverse;
+        }
+
+        @keyframes spin-ring { to { transform: rotate(360deg); } }
+
+        .logo-ring img {
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 3px solid rgba(14,165,233,0.35);
+            box-shadow: 0 0 60px rgba(14,165,233,0.25), 0 0 120px rgba(14,165,233,0.1);
+        }
+
+        .float-chip {
+            position: absolute;
+            background: white;
+            border-radius: 12px;
+            padding: 0.55rem 1rem;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.14);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--dark);
+            white-space: nowrap;
+        }
+
+        .float-chip.chip-1 { top: 8%; right: -20px; animation: float-y 3.2s ease-in-out infinite; }
+        .float-chip.chip-2 { bottom: 12%; left: -20px; animation: float-y 3.2s ease-in-out infinite 1.6s; }
+
+        @keyframes float-y {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* ===== SHARED SECTION STYLES ===== */
+        section { padding: 5.5rem 0; }
+
+        .tag-pill {
+            display: inline-block;
+            background: var(--sky-pale);
+            color: var(--sky);
+            border-radius: 100px;
+            padding: 0.32rem 1rem;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            margin-bottom: 1rem;
+        }
+
+        .sec-title {
+            font-size: clamp(1.75rem, 3vw, 2.4rem);
+            font-weight: 800;
+            color: var(--dark);
+            line-height: 1.2;
+            margin-bottom: 0.9rem;
+        }
+
+        .sec-sub {
+            font-size: 1rem;
+            color: var(--muted);
+            line-height: 1.75;
+            max-width: 500px;
+        }
+
+        /* ===== FEATURES ===== */
+        .feature-card {
+            background: var(--white);
+            border: 1.5px solid var(--border);
+            border-radius: 18px;
+            padding: 2rem;
+            height: 100%;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            border-color: var(--sky);
+            box-shadow: 0 12px 40px rgba(14,165,233,0.1);
+            transform: translateY(-4px);
+        }
+
+        .feat-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 13px;
+            background: var(--sky-pale);
+            color: var(--sky);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            margin-bottom: 1.2rem;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover .feat-icon {
+            background: var(--sky);
+            color: white;
+        }
+
+        .feature-card h4 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-card p { font-size: 0.875rem; color: var(--muted); line-height: 1.65; margin: 0; }
+
+        /* ===== PRODUCTS ===== */
+        #products { background: var(--sky-pale); }
+
+        .product-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 2px 16px rgba(14,165,233,0.06);
+            transition: all 0.3s ease;
+            height: 100%;
+            border: 1.5px solid transparent;
+        }
+
+        .product-card:hover {
+            box-shadow: 0 16px 48px rgba(14,165,233,0.14);
+            transform: translateY(-6px);
+            border-color: var(--sky-mid);
+        }
+
+        .prod-img {
+            height: 160px;
+            background: linear-gradient(135deg, var(--sky-pale), var(--sky-mid));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3.5rem;
+            position: relative;
+        }
+
+        .prod-img::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 28px;
+            background: white;
+            border-radius: 50% 50% 0 0 / 28px 28px 0 0;
+        }
+
+        .prod-body { padding: 1.1rem 1.25rem 1.25rem; }
+
+        .prod-cat {
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            color: var(--sky);
+            margin-bottom: 0.3rem;
+        }
+
+        .prod-name { font-size: 1rem; font-weight: 700; color: var(--dark); margin-bottom: 0.3rem; }
+        .prod-desc { font-size: 0.82rem; color: var(--muted); line-height: 1.55; margin-bottom: 1rem; }
+
+        .prod-footer { display: flex; justify-content: space-between; align-items: flex-end; }
+
+        .prod-price { font-size: 0.78rem; color: var(--muted); }
+        .prod-price strong { display: block; font-size: 0.9rem; color: var(--sky); font-weight: 700; }
+
+        .btn-order {
+            background: var(--sky);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 0.42rem 0.95rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .btn-order:hover { background: var(--sky-dark); color: white; }
+
+        /* ===== HOW IT WORKS ===== */
+        .step-wrap { display: flex; flex-direction: column; gap: 0; }
+
+        .step-row {
+            display: flex;
+            gap: 1.4rem;
+            align-items: flex-start;
+        }
+
+        .step-left {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .step-num {
+            width: 46px;
+            height: 46px;
+            border-radius: 12px;
+            background: var(--sky);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.05rem;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .step-line {
+            width: 2px;
+            flex: 1;
+            min-height: 36px;
+            background: linear-gradient(to bottom, var(--sky-light), transparent);
+            margin: 6px 0;
+        }
+
+        .step-body { padding-bottom: 2rem; }
+        .step-body h5 { font-size: 1rem; font-weight: 700; color: var(--dark); margin-bottom: 0.3rem; }
+        .step-body p { font-size: 0.875rem; color: var(--muted); line-height: 1.65; margin: 0; }
+
+        /* ===== ABOUT ===== */
+        #about {
+            background: var(--dark);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #about::before {
+            content: '';
+            position: absolute;
+            top: -250px;
+            right: -250px;
+            width: 700px;
+            height: 700px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(14,165,233,0.09) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        #about .tag-pill { background: rgba(14,165,233,0.12); color: #7dd3fc; }
+        #about .sec-title { color: white; }
+
+        .about-text { color: rgba(255,255,255,0.62); font-size: 0.97rem; line-height: 1.8; }
+
+        .about-quote {
+            background: rgba(14,165,233,0.08);
+            border-left: 3px solid var(--sky);
+            border-radius: 0 12px 12px 0;
+            padding: 1rem 1.25rem;
+            color: rgba(255,255,255,0.75);
+            font-size: 0.93rem;
+            margin-top: 1.75rem;
+            font-style: italic;
+        }
+
+        .about-stat-card {
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 16px;
+            padding: 1.6rem;
+            text-align: center;
+            transition: all 0.3s;
+        }
+
+        .about-stat-card:hover {
+            background: rgba(14,165,233,0.09);
+            border-color: rgba(14,165,233,0.25);
+            transform: translateY(-3px);
+        }
+
+        .stat-big { font-size: 1.9rem; font-weight: 800; color: var(--sky); margin-bottom: 0.25rem; }
+        .stat-desc { font-size: 0.8rem; color: rgba(255,255,255,0.45); }
+
+        /* ===== CONTACT ===== */
+        .contact-card {
+            background: var(--sky-pale);
+            border-radius: 22px;
+            padding: 2.5rem;
+            border: 1.5px solid var(--sky-mid);
+        }
+
+        .contact-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .contact-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 11px;
+            background: var(--sky);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.95rem;
+            flex-shrink: 0;
+        }
+
+        .contact-row h6 {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            margin-bottom: 0.22rem;
+        }
+
+        .contact-row p { font-size: 0.92rem; color: var(--dark); font-weight: 500; margin: 0; line-height: 1.5; }
+
+        /* ===== CTA ===== */
+        .cta-band {
+            background: linear-gradient(135deg, var(--sky) 0%, #0369a1 100%);
+            padding: 5.5rem 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-band::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url('Images/loginBG.jpg');
+            background-size: cover;
+            background-position: center;
+            opacity: 0.04;
+        }
+
+        .cta-band h2 {
+            font-size: clamp(1.75rem, 3vw, 2.5rem);
+            font-weight: 800;
+            color: white;
+            margin-bottom: 0.9rem;
+        }
+
+        .cta-band p { font-size: 1rem; color: rgba(255,255,255,0.75); margin-bottom: 2.5rem; }
+
+        .btn-cta-w {
+            background: white;
+            color: var(--sky);
+            border: none;
+            border-radius: 12px;
+            padding: 0.85rem 2rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.14);
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .btn-cta-w:hover { color: var(--sky-dark); transform: translateY(-2px); box-shadow: 0 14px 35px rgba(0,0,0,0.2); }
+
+        .btn-cta-o {
+            background: transparent;
+            color: white;
+            border: 2px solid rgba(255,255,255,0.45);
+            border-radius: 12px;
+            padding: 0.85rem 2rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s;
+            font-family: 'Outfit', sans-serif;
+        }
+
+        .btn-cta-o:hover { background: rgba(255,255,255,0.12); color: white; border-color: white; transform: translateY(-2px); }
+
+        /* ===== FOOTER ===== */
+        footer {
+            background: #050e1f;
+            color: rgba(255,255,255,0.45);
+            padding: 3.5rem 0 1.75rem;
+        }
+
+        .footer-logo-wrap { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 1rem; }
+        .footer-logo-wrap img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+        .footer-logo-name { font-weight: 700; color: white; font-size: 1rem; line-height: 1.1; }
+        .footer-logo-sub { font-size: 0.68rem; color: rgba(255,255,255,0.35); }
+
+        .footer-desc { font-size: 0.845rem; line-height: 1.7; max-width: 270px; }
+
+        .footer-head { color: white; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 1rem; }
+
+        .footer-ul { list-style: none; padding: 0; margin: 0; }
+        .footer-ul li { margin-bottom: 0.45rem; }
+        .footer-ul a { color: rgba(255,255,255,0.45); text-decoration: none; font-size: 0.845rem; transition: color 0.2s; }
+        .footer-ul a:hover { color: var(--sky); }
+
+        .footer-hr { border-color: rgba(255,255,255,0.07); margin: 2rem 0 1.5rem; }
+
+        .footer-bottom { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; font-size: 0.78rem; }
+
+        /* ===== ACCESS MODAL ===== */
+        .access-opt {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem 1.1rem;
+            border: 2px solid var(--border);
+            border-radius: 14px;
+            background: white;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.22s ease;
+            width: 100%;
+            font-family: 'Outfit', sans-serif;
+            color: var(--dark);
+        }
+
+        .access-opt:hover {
+            border-color: var(--sky);
+            background: var(--sky-pale);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(14,165,233,0.13);
+            color: var(--dark);
+        }
+
+        .access-opt.guest-opt {
+            border-style: dashed;
+            border-color: #cbd5e1;
+        }
+
+        .access-opt.guest-opt:hover {
+            border-color: var(--sky);
+            border-style: solid;
+        }
+
+        .access-opt-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: var(--sky-mid);
+            color: var(--sky);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+            transition: all 0.22s;
+        }
+
+        .access-opt:hover .access-opt-icon {
+            background: var(--sky);
+            color: white;
+        }
+
+        .guest-opt .access-opt-icon {
+            background: #f1f5f9;
+            color: #94a3b8;
+        }
+
+        .guest-opt:hover .access-opt-icon {
+            background: var(--sky);
+            color: white;
+        }
+
+        .access-opt-text strong {
+            display: block;
+            font-size: 0.93rem;
+            font-weight: 700;
+            margin-bottom: 0.1rem;
+        }
+
+        .access-opt-text small {
+            font-size: 0.77rem;
+            color: var(--muted);
+        }
+
+        .access-opt-arrow {
+            margin-left: auto;
+            color: #cbd5e1;
+            font-size: 0.85rem;
+            transition: color 0.2s, transform 0.2s;
+            flex-shrink: 0;
+        }
+
+        .access-opt:hover .access-opt-arrow {
+            color: var(--sky);
+            transform: translateX(3px);
+        }
+
+        .modal-divider {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #94a3b8;
+            font-size: 0.75rem;
+        }
+
+        .modal-divider::before,
+        .modal-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        .btn-order { cursor: pointer; }
+
+        /* ===== ANIMATION ===== */
+        .fade-up {
+            opacity: 0;
+            transform: translateY(28px);
+            transition: opacity 0.6s ease, transform 0.6s ease;
+        }
+
+        .fade-up.visible { opacity: 1; transform: translateY(0); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 991px) {
+            .logo-ring { width: 200px; height: 200px; margin: 2.5rem auto 0; }
+            .logo-ring img { width: 160px; height: 160px; }
+            .float-chip { display: none; }
+        }
+
+        @media (max-width: 576px) {
+            section { padding: 4rem 0; }
+            .hero-stats { gap: 1.5rem; }
+            .footer-bottom { flex-direction: column; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="navbar navbar-expand-lg" id="mainNav">
+    <div class="container">
+        <a class="navbar-brand" href="#">
+            <img src="Images/logo1.jpg" alt="GenTri's Best Logo">
+            <div class="brand-text">
+                <span class="brand-main">GenTri's Best</span>
+                <span class="brand-sub">Dairy Box GenTri</span>
+            </div>
+        </a>
+        <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu" aria-controls="navMenu" aria-expanded="false">
+            <i class="fa fa-bars" style="color:var(--sky);font-size:1.1rem;"></i>
+        </button>
+        <div class="collapse navbar-collapse" id="navMenu">
+            <ul class="navbar-nav mx-auto gap-1">
+                <li class="nav-item"><a class="nav-link" href="#home">Home</a></li>
+                <li class="nav-item"><a class="nav-link" href="#features">Why Us</a></li>
+                <li class="nav-item"><a class="nav-link" href="#products">Products</a></li>
+                <li class="nav-item"><a class="nav-link" href="#about">About</a></li>
+                <li class="nav-item"><a class="nav-link" href="#contact">Contact</a></li>
+            </ul>
+            <div class="d-flex gap-2 mt-2 mt-lg-0">
+                <a href="GenTrisBest_Login.html" class="nav-link btn-nav-login">Log In</a>
+                <a href="register.html" class="nav-link btn-nav-signup">Sign Up</a>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section class="hero" id="home">
+    <div class="hero-orb-1"></div>
+    <div class="hero-orb-2"></div>
+    <div class="container">
+        <div class="row align-items-center gy-5">
+            <div class="col-lg-6 hero-content">
+                <div class="hero-badge">
+                    <i class="fa fa-map-marker-alt"></i>
+                    General Trias, Cavite
+                </div>
+                <h1>
+                    Fresh Dairy,<br>
+                    <span class="highlight">Straight to</span><br>
+                    Your Door
+                </h1>
+                <p class="lead-text">
+                    Premium dairy products from Barangay Santiago, General Trias. We bring local freshness, wholesale pricing, and fast delivery — all in one easy online platform.
+                </p>
+                <div class="hero-actions">
+                    <button class="btn-hero-primary" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">
+                        <i class="fa fa-shopping-basket"></i> Shop Now
+                    </button>
+                    <a href="#products" class="btn-hero-secondary">
+                        <i class="fa fa-eye"></i> View Products
+                    </a>
+                </div>
+                <div class="hero-stats">
+                    <div class="hero-stat">
+                        <span class="stat-num">100%</span>
+                        <span class="stat-lbl">Locally Sourced</span>
+                    </div>
+                    <div class="hero-stat">
+                        <span class="stat-num">COD</span>
+                        <span class="stat-lbl">Available</span>
+                    </div>
+                    <div class="hero-stat">
+                        <span class="stat-num">Fast</span>
+                        <span class="stat-lbl">Delivery</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 hero-visual">
+                <div class="logo-ring">
+                    <img src="Images/logo1.jpg" alt="GenTri's Best">
+                    <div class="float-chip chip-1">
+                        <i class="fa fa-check-circle" style="color:#10b981;"></i>
+                        Quality Assured
+                    </div>
+                    <div class="float-chip chip-2">
+                        <i class="fa fa-truck" style="color:var(--sky);"></i>
+                        Delivery Available
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== FEATURES ===== -->
+<section id="features">
+    <div class="container">
+        <div class="row justify-content-center text-center mb-5">
+            <div class="col-lg-6 fade-up">
+                <span class="tag-pill">Why Choose Us</span>
+                <h2 class="sec-title">Your Trusted Local Dairy Shop</h2>
+                <p class="sec-sub mx-auto">We make fresh dairy accessible with a seamless online ordering experience built for your convenience.</p>
+            </div>
+        </div>
+        <div class="row g-4">
+            <div class="col-md-6 col-lg-4 fade-up">
+                <div class="feature-card">
+                    <div class="feat-icon"><i class="fa fa-leaf"></i></div>
+                    <h4>Fresh & Locally Sourced</h4>
+                    <p>All products come directly from trusted local dairy farms in the General Trias area, ensuring peak freshness on every order.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 fade-up" style="transition-delay:.08s">
+                <div class="feature-card">
+                    <div class="feat-icon"><i class="fa fa-tags"></i></div>
+                    <h4>Wholesale Pricing</h4>
+                    <p>Order in bulk and unlock our wholesale rates — great for households, restaurants, and businesses that need more at a better price.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 fade-up" style="transition-delay:.16s">
+                <div class="feature-card">
+                    <div class="feat-icon"><i class="fa fa-truck"></i></div>
+                    <h4>Doorstep Delivery</h4>
+                    <p>We deliver via Lalamove straight to your address. Delivery fees are automatically calculated based on your distance from our store.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 fade-up" style="transition-delay:.24s">
+                <div class="feature-card">
+                    <div class="feat-icon"><i class="fa fa-wallet"></i></div>
+                    <h4>Flexible Payments</h4>
+                    <p>Pay via Cash on Delivery, GCash, or Card. Choose whatever is most convenient — we've got you covered.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 fade-up" style="transition-delay:.32s">
+                <div class="feature-card">
+                    <div class="feat-icon"><i class="fa fa-shield-alt"></i></div>
+                    <h4>Safe & Hygienic</h4>
+                    <p>Every product is handled under strict quality and hygiene standards. Your health and satisfaction are our top priorities.</p>
+                </div>
+            </div>
+            <div class="col-md-6 col-lg-4 fade-up" style="transition-delay:.40s">
+                <div class="feature-card">
+                    <div class="feat-icon"><i class="fa fa-history"></i></div>
+                    <h4>Order Tracking</h4>
+                    <p>Track every order from placement to delivery through your personal dashboard, complete with full order history and status updates.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== PRODUCTS ===== -->
+<section id="products">
+    <div class="container">
+        <div class="row justify-content-center text-center mb-5">
+            <div class="col-lg-6 fade-up">
+                <span class="tag-pill">Our Products</span>
+                <h2 class="sec-title">Premium Dairy Selection</h2>
+                <p class="sec-sub mx-auto">Explore our range of fresh dairy goods. Log in to see live pricing, real-time stock, and place your order.</p>
+            </div>
+        </div>
+        <div class="row g-4">
+            <div class="col-sm-6 col-lg-4 fade-up">
+                <div class="product-card">
+                    <div class="prod-img">🥛</div>
+                    <div class="prod-body">
+                        <div class="prod-cat">Fresh Dairy</div>
+                        <div class="prod-name">Fresh Milk</div>
+                        <div class="prod-desc">Pure, nutrient-rich fresh milk sourced daily from local farms. No preservatives — just natural goodness.</div>
+                        <div class="prod-footer">
+                            <div class="prod-price">Starting at<strong>Market Price</strong></div>
+                            <button class="btn-order" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">Order Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4 fade-up" style="transition-delay:.08s">
+                <div class="product-card">
+                    <div class="prod-img">🧀</div>
+                    <div class="prod-body">
+                        <div class="prod-cat">Cheese</div>
+                        <div class="prod-name">Local Cheese</div>
+                        <div class="prod-desc">Handcrafted from the finest fresh milk. Rich, creamy, and perfect for cooking, snacking, or gifting.</div>
+                        <div class="prod-footer">
+                            <div class="prod-price">Starting at<strong>Market Price</strong></div>
+                            <button class="btn-order" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">Order Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4 fade-up" style="transition-delay:.16s">
+                <div class="product-card">
+                    <div class="prod-img">🍦</div>
+                    <div class="prod-body">
+                        <div class="prod-cat">Frozen Dairy</div>
+                        <div class="prod-name">Ice Cream</div>
+                        <div class="prod-desc">Creamy, indulgent ice cream made with real dairy milk. Available in flavors the whole family will love.</div>
+                        <div class="prod-footer">
+                            <div class="prod-price">Starting at<strong>Market Price</strong></div>
+                            <button class="btn-order" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">Order Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4 fade-up" style="transition-delay:.24s">
+                <div class="product-card">
+                    <div class="prod-img">🧈</div>
+                    <div class="prod-body">
+                        <div class="prod-cat">Spreads</div>
+                        <div class="prod-name">Butter & Cream</div>
+                        <div class="prod-desc">Rich, velvety butter and fresh cream for baking, cooking, or spreading. Naturally made, locally sourced.</div>
+                        <div class="prod-footer">
+                            <div class="prod-price">Starting at<strong>Market Price</strong></div>
+                            <button class="btn-order" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">Order Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4 fade-up" style="transition-delay:.32s">
+                <div class="product-card">
+                    <div class="prod-img">🥚</div>
+                    <div class="prod-body">
+                        <div class="prod-cat">Farm Goods</div>
+                        <div class="prod-name">Farm Eggs</div>
+                        <div class="prod-desc">Fresh, free-range farm eggs — a wholesome complement to our dairy product lineup. Sourced from local farms.</div>
+                        <div class="prod-footer">
+                            <div class="prod-price">Starting at<strong>Market Price</strong></div>
+                            <button class="btn-order" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">Order Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-4 fade-up" style="transition-delay:.40s">
+                <div class="product-card">
+                    <div class="prod-img" style="background:linear-gradient(135deg,#fef9ec,#fde68a);">🛒</div>
+                    <div class="prod-body">
+                        <div class="prod-cat">& More</div>
+                        <div class="prod-name">Full Catalog</div>
+                        <div class="prod-desc">Browse our complete inventory — live stock levels, exact pricing, and wholesale rates — all in your dashboard.</div>
+                        <div class="prod-footer">
+                            <div class="prod-price">See all in<strong>Dashboard</strong></div>
+                            <button class="btn-order" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">View All</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-5 fade-up">
+            <p style="color:var(--muted);font-size:0.9rem;margin-bottom:1.25rem;">Log in to see live availability, current pricing, and wholesale rates.</p>
+            <button class="btn-hero-primary" data-bs-toggle="modal" data-bs-target="#accessModal" type="button">
+                <i class="fa fa-sign-in-alt"></i> Browse Full Catalog
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ===== HOW IT WORKS ===== -->
+<section id="how">
+    <div class="container">
+        <div class="row align-items-center gy-5">
+            <div class="col-lg-5 fade-up">
+                <span class="tag-pill">Simple Process</span>
+                <h2 class="sec-title">Order in 4 Easy Steps</h2>
+                <p class="sec-sub">Getting fresh dairy delivered to your door is quick and straightforward — no hassle, just great products.</p>
+                <div class="d-flex gap-3 flex-wrap mt-4">
+                    <a href="register.html" class="btn-hero-primary" style="font-size:.875rem;padding:.72rem 1.5rem;">
+                        <i class="fa fa-user-plus"></i> Create Account
+                    </a>
+                    <a href="GenTrisBest_Login.html" class="btn-hero-secondary" style="font-size:.875rem;padding:.72rem 1.5rem;background:var(--sky-pale);color:var(--sky);border-color:var(--sky-mid);">
+                        <i class="fa fa-sign-in-alt"></i> Sign In
+                    </a>
+                </div>
+            </div>
+            <div class="col-lg-6 offset-lg-1 fade-up" style="transition-delay:.18s">
+                <div class="step-wrap">
+                    <div class="step-row">
+                        <div class="step-left">
+                            <div class="step-num">1</div>
+                            <div class="step-line"></div>
+                        </div>
+                        <div class="step-body">
+                            <h5>Create Your Account</h5>
+                            <p>Sign up with your name, email, and contact number. Takes under a minute — your account is instantly ready.</p>
+                        </div>
+                    </div>
+                    <div class="step-row">
+                        <div class="step-left">
+                            <div class="step-num">2</div>
+                            <div class="step-line"></div>
+                        </div>
+                        <div class="step-body">
+                            <h5>Browse & Add to Cart</h5>
+                            <p>Explore our fresh products, check live stock, and add your favorites to your shopping cart with a single click.</p>
+                        </div>
+                    </div>
+                    <div class="step-row">
+                        <div class="step-left">
+                            <div class="step-num">3</div>
+                            <div class="step-line"></div>
+                        </div>
+                        <div class="step-body">
+                            <h5>Choose Delivery & Payment</h5>
+                            <p>Enter your address, review the auto-calculated delivery fee, and pick your payment method — COD, GCash, or Card.</p>
+                        </div>
+                    </div>
+                    <div class="step-row">
+                        <div class="step-left">
+                            <div class="step-num">4</div>
+                        </div>
+                        <div class="step-body">
+                            <h5>Receive Your Order</h5>
+                            <p>Sit back and relax. Track your order in real time from your dashboard as we prepare and deliver your dairy goods.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== ABOUT ===== -->
+<section id="about">
+    <div class="container position-relative">
+        <div class="row align-items-center gy-5">
+            <div class="col-lg-6 fade-up">
+                <span class="tag-pill">Our Story</span>
+                <h2 class="sec-title">Local Roots,<br>Fresh Products</h2>
+                <p class="about-text">
+                    GenTri's Best — the Dairy Box of General Trias — was born from a passion for bringing high-quality, locally sourced dairy products to our community. Nestled in Barangay Santiago, General Trias, Cavite, we believe everyone deserves access to fresh, nutritious dairy without compromise.
+                </p>
+                <p class="about-text mt-3">
+                    From a neighborhood dairy stall to a full online ordering platform, we've grown while staying true to our values: freshness, fair pricing, and genuine community service.
+                </p>
+                <div class="about-quote">
+                    <i class="fa fa-quote-left me-2" style="color:var(--sky);opacity:.7;"></i>
+                    We don't just sell dairy — we bring farm-fresh quality straight to your table.
+                </div>
+            </div>
+            <div class="col-lg-5 offset-lg-1 fade-up" style="transition-delay:.2s">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="about-stat-card">
+                            <div class="stat-big">Local</div>
+                            <div class="stat-desc">Sourced Products</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="about-stat-card">
+                            <div class="stat-big">Daily</div>
+                            <div class="stat-desc">Fresh Stock</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="about-stat-card">
+                            <div class="stat-big">Fast</div>
+                            <div class="stat-desc">Lalamove Delivery</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="about-stat-card">
+                            <div class="stat-big">3</div>
+                            <div class="stat-desc">Payment Methods</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== CONTACT ===== -->
+<section id="contact">
+    <div class="container">
+        <div class="row justify-content-center text-center mb-5">
+            <div class="col-lg-6 fade-up">
+                <span class="tag-pill">Find Us</span>
+                <h2 class="sec-title">Visit or Order Online</h2>
+                <p class="sec-sub mx-auto">Based in General Trias, Cavite — and ready to deliver to you wherever you are.</p>
+            </div>
+        </div>
+        <div class="row justify-content-center">
+            <div class="col-lg-8 fade-up">
+                <div class="contact-card">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="contact-row">
+                                <div class="contact-icon"><i class="fa fa-map-marker-alt"></i></div>
+                                <div>
+                                    <h6>Location</h6>
+                                    <p>Purok 1, Barangay Santiago,<br>General Trias, Cavite, Philippines</p>
+                                </div>
+                            </div>
+                            <div class="contact-row">
+                                <div class="contact-icon"><i class="fa fa-clock"></i></div>
+                                <div>
+                                    <h6>Business Hours</h6>
+                                    <p>Monday – Sunday<br>Open Daily</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="contact-row">
+                                <div class="contact-icon"><i class="fa fa-truck"></i></div>
+                                <div>
+                                    <h6>Delivery</h6>
+                                    <p>Via Lalamove<br>Fee based on your distance</p>
+                                </div>
+                            </div>
+                            <div class="contact-row">
+                                <div class="contact-icon"><i class="fa fa-credit-card"></i></div>
+                                <div>
+                                    <h6>Payment Methods</h6>
+                                    <p>Cash on Delivery<br>GCash &amp; Card</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <hr style="border-color:var(--sky-mid);margin:1.5rem 0;">
+                    <div class="text-center">
+                        <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1.25rem;">Ready to order? Create a free account and start shopping today.</p>
+                        <div class="d-flex gap-3 justify-content-center flex-wrap">
+                            <a href="GenTrisBest_Login.html" class="btn-hero-primary" style="font-size:.875rem;padding:.72rem 1.5rem;">
+                                <i class="fa fa-sign-in-alt"></i> Log In
+                            </a>
+                            <a href="register.html" class="btn-hero-secondary" style="font-size:.875rem;padding:.72rem 1.5rem;background:var(--sky-pale);color:var(--sky);border-color:var(--sky-mid);">
+                                <i class="fa fa-user-plus"></i> Sign Up Free
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== CTA BAND ===== -->
+<div class="cta-band">
+    <div class="container position-relative">
+        <div class="row justify-content-center">
+            <div class="col-lg-7 fade-up">
+                <h2>Ready to Taste the Difference?</h2>
+                <p>Join our growing community and get fresh dairy delivered right to your door.</p>
+                <div class="d-flex gap-3 justify-content-center flex-wrap">
+                    <a href="register.html" class="btn-cta-w">
+                        <i class="fa fa-user-plus"></i> Get Started Free
+                    </a>
+                    <a href="GenTrisBest_Login.html" class="btn-cta-o">
+                        <i class="fa fa-sign-in-alt"></i> Sign In
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<footer>
+    <div class="container">
+        <div class="row gy-4">
+            <div class="col-lg-4">
+                <div class="footer-logo-wrap">
+                    <img src="Images/logo1.jpg" alt="Logo">
+                    <div>
+                        <div class="footer-logo-name">GenTri's Best</div>
+                        <div class="footer-logo-sub">Dairy Box GenTri</div>
+                    </div>
+                </div>
+                <p class="footer-desc">Your local source for fresh, quality dairy products in General Trias, Cavite. Order online, delivered to your door.</p>
+            </div>
+            <div class="col-6 col-lg-2 offset-lg-2">
+                <div class="footer-head">Navigate</div>
+                <ul class="footer-ul">
+                    <li><a href="#home">Home</a></li>
+                    <li><a href="#features">Why Us</a></li>
+                    <li><a href="#products">Products</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="footer-head">Account</div>
+                <ul class="footer-ul">
+                    <li><a href="GenTrisBest_Login.html">Log In</a></li>
+                    <li><a href="register.html">Sign Up</a></li>
+                    <li><a href="forgot_password.html">Forgot Password</a></li>
+                </ul>
+            </div>
+            <div class="col-lg-2">
+                <div class="footer-head">Location</div>
+                <p style="font-size:.845rem;line-height:1.7;color:rgba(255,255,255,.45);">Purok 1, Brgy. Santiago,<br>General Trias, Cavite<br>Philippines</p>
+            </div>
+        </div>
+        <hr class="footer-hr">
+        <div class="footer-bottom">
+            <span>&copy; 2025 GenTri's Best &mdash; Dairy Box GenTri. All rights reserved.</span>
+            <span>Made with <i class="fa fa-heart" style="color:#ef4444;"></i> in General Trias, Cavite</span>
+        </div>
+    </div>
+</footer>
+
+<!-- ===== ACCESS MODAL ===== -->
+<div class="modal fade" id="accessModal" tabindex="-1" aria-labelledby="accessModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+        <div class="modal-content border-0 rounded-4 shadow-lg">
+
+            <div class="modal-header border-0 pb-1 pt-3 px-4">
+                <div class="text-center w-100">
+                    <img src="Images/logo1.jpg" alt="Logo"
+                        style="width:52px;height:52px;border-radius:50%;object-fit:cover;border:2px solid #e0f2fe;margin-bottom:.6rem;">
+                    <h5 class="modal-title fw-800" id="accessModalLabel"
+                        style="font-weight:800;color:#0f172a;font-size:1.1rem;">
+                        How would you like to continue?
+                    </h5>
+                    <p class="text-muted mb-0" style="font-size:.8rem;">
+                        Log in to order, or browse as a guest to explore.
+                    </p>
+                </div>
+                <button type="button" class="btn-close position-absolute top-0 end-0 m-3"
+                    data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <div class="modal-body px-4 pb-4 pt-3">
+                <div class="d-flex flex-column gap-2">
+
+                    <a href="GenTrisBest_Login.html" class="access-opt">
+                        <div class="access-opt-icon"><i class="fa fa-sign-in-alt"></i></div>
+                        <div class="access-opt-text">
+                            <strong>Log In</strong>
+                            <small>Access your account to place orders</small>
+                        </div>
+                        <i class="fa fa-chevron-right access-opt-arrow"></i>
+                    </a>
+
+                    <a href="register.html" class="access-opt">
+                        <div class="access-opt-icon"><i class="fa fa-user-plus"></i></div>
+                        <div class="access-opt-text">
+                            <strong>Create Account</strong>
+                            <small>Sign up free and start ordering today</small>
+                        </div>
+                        <i class="fa fa-chevron-right access-opt-arrow"></i>
+                    </a>
+
+                    <div class="modal-divider my-1">or</div>
+
+                    <a href="GenTrisBest_Dashboard.html" class="access-opt guest-opt">
+                        <div class="access-opt-icon"><i class="fa fa-eye"></i></div>
+                        <div class="access-opt-text">
+                            <strong>Browse as Guest</strong>
+                            <small>View products — ordering requires an account</small>
+                        </div>
+                        <i class="fa fa-chevron-right access-opt-arrow"></i>
+                    </a>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Scroll-triggered fade-up animations
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.12 });
+
+    document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+
+    // Navbar scroll shadow
+    window.addEventListener('scroll', () => {
+        document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 20);
+    });
+
+    // Active nav highlight on scroll
+    const sections = document.querySelectorAll('section[id], div.cta-band');
+    const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
+
+    window.addEventListener('scroll', () => {
+        let current = '';
+        sections.forEach(s => {
+            if (window.scrollY >= s.offsetTop - 140) current = s.id || '';
+        });
+        navLinks.forEach(link => {
+            const href = link.getAttribute('href');
+            const match = href && href.startsWith('#') && href.slice(1) === current;
+            link.classList.toggle('active-link', match);
+        });
+    }, { passive: true });
+</script>
+<script src="transitions.js"></script>
+</body>
+</html>
